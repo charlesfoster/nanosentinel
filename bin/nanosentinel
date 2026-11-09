@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Launcher: runs nanosentinel inside its pixi environment without needing `pixi run` (so Ctrl+C and
+# Enter reach the program directly). Safe to symlink onto your PATH.
+set -euo pipefail
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+root="$(cd -P "$(dirname "$src")/.." && pwd)"
+env_dir="$root/.pixi/envs/default"
+# Keep the environment in step with pixi.lock: reinstall (from the lock file, no re-solving) when it changes.
+stamp="$env_dir/.nanosentinel_lock"
+want="$(cat "$root/pixi.toml" "$root/pixi.lock" | cksum)"
+have="$(cat "$stamp" 2>/dev/null || true)"
+if [ ! -x "$env_dir/bin/python" ] || [ "$want" != "$have" ]; then
+  if command -v pixi >/dev/null 2>&1; then
+    echo "nanosentinel: setting up its environment with pixi ..." >&2
+    pixi install --quiet --frozen --manifest-path "$root/pixi.toml" >&2
+    echo "$want" > "$stamp"
+  elif [ ! -x "$env_dir/bin/python" ]; then
+    echo "nanosentinel: no environment yet and pixi is not installed (see https://pixi.sh)" >&2
+    exit 1
+  else
+    echo "nanosentinel: warning: pixi.lock changed but pixi is not installed; using the existing environment" >&2
+  fi
+fi
+export PATH="$env_dir/bin:$PATH"
+export CONDA_PREFIX="$env_dir"
+export PYTHONPATH="$root/src${PYTHONPATH:+:$PYTHONPATH}"
+exec "$env_dir/bin/python" -P -m nanosentinel "$@"

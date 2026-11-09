@@ -1,0 +1,10 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# Snakemake / RAMPART runtime output
+.snakemake/
+annotations/
+__pycache__/
+.pytest_cache/
+scratch/
