@@ -72,3 +72,22 @@ def test_read_length_stats_and_dominant_reference():
     # sorted: 50 70 100 200 300 400 1000 -> median 200; half of 2120 bases is 1060, reached by 1000 + 400 -> N50 400
     assert stats["n50"] == 400 and stats["median"] == 200
     assert tracker.dominant() == "A" and tracker.ref_reads["A"] == 5 and tracker.mapped == 6
+
+
+def test_paf_parsing_primary_secondary_chimeric_and_identity_filter():
+    from nanosentinel.annotate import parse_paf
+
+    def line(read, ref, start, end, matches, block, tp, score, mapq=0):
+        return f"{read}\t500\t0\t500\t+\t{ref}\t9000\t{start}\t{end}\t{matches}\t{block}\t{mapq}\ttp:A:{tp}\tAS:i:{score}"
+
+    paf = [
+        line("r1", "A", 100, 600, 480, 500, "P", 900, 40),  # primary, 96% identity
+        line("r1", "B", 100, 600, 470, 500, "S", 860),  # near-equal sibling: kept, but not a primary
+        line("r2", "A", 100, 600, 350, 500, "P", 400),  # 70% identity: below 0.8, so r2 is unmapped
+        line("r3", "A", 100, 300, 190, 200, "P", 300),  # chimeric: two primaries; the higher score wins
+        line("r3", "A", 2000, 2400, 380, 400, "P", 700),
+    ]
+    out = parse_paf(paf, min_identity=0.8)
+    assert [(r[0], r[-1]) for r in out["r1"]] == [("A", 1), ("B", 0)]
+    assert "r2" not in out
+    assert [(r[2], r[-1]) for r in out["r3"]] == [(2000, 1), (100, 0)]

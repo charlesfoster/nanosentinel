@@ -7,7 +7,7 @@ from . import __version__
 from .concat import concatenate
 from .console import Console
 from .errors import RunNotReady, SentinelError
-from .protocol import build_protocol
+from .references import prepare_references
 from .report import hms
 from .rundir import DEFAULT_MINKNOW_DATA, find_fastq_pass
 from .samplesheet import read_samplesheet, select_run
@@ -16,8 +16,8 @@ from .samplesheet import read_samplesheet, select_run
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
         prog="nanosentinel",
-        description="Monitor a live ONT run with RAMPART using a samplesheet, record how long each "
-        "sample takes to reach a target depth, and (optionally) concatenate reads for analysis.",
+        description="Monitor a live ONT run from a samplesheet: map reads as MinKNOW writes them, show coverage on a local "
+        "dashboard, record how long each sample takes to reach a target depth, and (optionally) concatenate reads.",
     )
     p.add_argument("--version", action="version", version=f"nanosentinel {__version__}")
     g = p.add_argument_group("run")
@@ -27,21 +27,24 @@ def parse_args(argv=None):
     g.add_argument("--minknow_data", default=DEFAULT_MINKNOW_DATA, help="MinKNOW data directory (default: %(default)s)")
     g.add_argument("--outdir", help="Output directory (default: nanosentinel_<run_name>)")
     g = p.add_argument_group("references (ordinary FASTA / BED / GFF files)")
-    g.add_argument("--possible_references", help="Multi-FASTA reference panel reads are mapped to")
-    g.add_argument("--reference_fasta", help="Reference the coverage plot and primer scheme are drawn against (default: first panel entry)")
+    g.add_argument("--possible_references", help="Multi-FASTA reference panel reads are mapped to (several similar references are fine)")
+    g.add_argument("--reference_fasta", help="Reference the primer scheme and genes are drawn against (default: first panel entry)")
     g.add_argument("--primer_bed", help="Primer scheme BED (ARTIC-style <amplicon>_LEFT/_RIGHT names) on the coordinate reference")
     g.add_argument("--gff", help="GFF3 with gene/CDS features on the coordinate reference (labels the coverage plot)")
     g = p.add_argument_group("monitoring")
     g.add_argument("--target_depth", type=int, default=20, help="Depth that counts as covered (default: %(default)s)")
     g.add_argument("--target_fraction", type=float, default=0.9, help="Fraction of the target region that must reach --target_depth (default: %(default)s)")
     g.add_argument("--denominator", choices=["genome", "amplicons"], default="genome", help="Region the fraction is measured over; 'amplicons' uses the --primer_bed span (default: %(default)s)")
-    g.add_argument("--poll_interval", type=int, default=10, help="Seconds between checks of RAMPART's annotations (default: %(default)s)")
-    g.add_argument("--rampart_port", type=int, default=6010, help="RAMPART web port; the next port is used for its socket (default: %(default)s)")
+    g.add_argument("--poll_interval", type=int, default=5, help="Seconds between updates (default: %(default)s)")
+    g.add_argument("--port", type=int, default=6010, help="Dashboard port (default: %(default)s)")
+    g.add_argument("--host", default="127.0.0.1", help="Address the dashboard listens on; use 0.0.0.0 to view it from another machine (default: %(default)s)")
+    g.add_argument("--min_identity", type=float, default=0.8, help="Minimum alignment identity for a read to count as mapped (default: %(default)s)")
+    g.add_argument("--threads", type=int, default=4, help="Threads for minimap2 (default: %(default)s)")
     g.add_argument("--webhook", help="URL to POST a JSON {'text': ...} message to when every sample has reached target")
-    g.add_argument("--no_browser", action="store_true", help="Do not open RAMPART in a browser")
-    g.add_argument("--clear_annotations", action="store_true", help="Discard earlier annotations and re-annotate every read")
+    g.add_argument("--no_browser", action="store_true", help="Do not open the dashboard in a browser")
+    g.add_argument("--clear_annotations", action="store_true", help="Discard earlier annotations and map every read again")
     g.add_argument("--skip_monitor", action="store_true", help="Skip monitoring (use with --concatenate_reads for a finished run)")
-    g.add_argument("--dry_run", action="store_true", help="Check inputs, write the RAMPART protocol, then stop without launching anything")
+    g.add_argument("--dry_run", action="store_true", help="Check inputs and prepare the reference index, then stop without monitoring")
     g = p.add_argument_group("read concatenation")
     g.add_argument("--concatenate_reads", action="store_true", help="After monitoring, concatenate each sample's reads and write samplesheet_with_reads.csv")
     g.add_argument("--gzip", action="store_true", help="Gzip concatenated output when the input FASTQs are plain text")
@@ -93,18 +96,15 @@ def run(args):
     if not args.skip_monitor:
         from .monitor import monitor  # imported late so --help and --skip_monitor stay fast
 
-        protocol_dir = outdir / "rampart_protocol"
-        refinfo = build_protocol(
-            protocol_dir, args.possible_references, args.reference_fasta, args.primer_bed, args.gff, args.target_depth
-        )
-        console.say(f"Coverage is drawn against {refinfo.coordinate_ref} ({len(refinfo.lengths)} reference(s) in the panel)")
+        refinfo = prepare_references(outdir, args.possible_references, args.reference_fasta, args.primer_bed, args.gff)
+        console.say(f"Reference panel: {len(refinfo.lengths)} sequence(s); primer scheme and genes are drawn against {refinfo.coordinate_ref}")
         if args.dry_run:
-            console.say("Dry run: inputs are valid and the RAMPART protocol was written; nothing was launched.")
+            console.say("Dry run: inputs are valid and the reference index was built; nothing was monitored.")
             return 0
         monitor(
-            console, rows, refinfo, protocol_dir, fastq_pass, outdir, run_name,
-            (args.rampart_port, args.rampart_port + 1), args.target_depth, args.target_fraction, args.denominator,
-            args.poll_interval, args.webhook, not args.no_browser, args.clear_annotations,
+            console, rows, refinfo, fastq_pass, outdir, run_name, args.host, args.port, args.target_depth,
+            args.target_fraction, args.denominator, args.poll_interval, args.webhook, not args.no_browser,
+            args.clear_annotations, args.min_identity, args.threads,
         )  # fmt: skip
     elif args.dry_run:
         console.say("Dry run: inputs are valid; nothing was done.")

@@ -83,24 +83,26 @@ def write_sample_summary(path, rows, trackers):
             r.sample, r.barcode, _bool(r.neg_control), t.reads, t.mapped,
             f"{100 * t.mapped / t.reads:.1f}" if t.reads else "NA", t.bases,
             dom or "NA", f"{100 * t.ref_reads[dom] / t.mapped:.1f}" if dom else "NA",
-            f"{t.ref_bases[dom] / t.ref_lengths[dom]:.1f}" if dom else "NA", f"{frac:.3f}",
+            f"{t.mean_depth(dom):.1f}" if dom else "NA", f"{frac:.3f}",
             *([ls["total"], f"{ls['mean']:.0f}", f"{ls['median']:.0f}", ls["n50"], ls["min"], ls["max"]] if ls else ["NA"] * 6),
         ])  # fmt: skip
     _write(path, header, records)
 
 
 def write_reference_summary(path, rows, trackers):
-    """One line per sample per reference that received reads: composition, estimated depth and coverage."""
+    """One line per sample per reference with coverage: primary read share, mean depth and fraction at target depth."""
     header = ["sample", "barcode", "neg_control", "reference", "reads", "read_pct", "mapped_bases",
               "mean_depth", "fraction_at_target", "dominant"]  # fmt: skip
     records = []
     for r in rows:
         t = trackers[r.barcode]
         dom = t.dominant()
-        for ref, n in t.ref_reads.most_common():
+        refs = sorted(t.depth, key=lambda ref: (-t.ref_reads[ref], -t.fraction_of(ref)))
+        for ref in refs:
+            n = t.ref_reads[ref]
             records.append([
-                r.sample, r.barcode, _bool(r.neg_control), ref, n, f"{100 * n / t.mapped:.1f}", t.ref_bases[ref],
-                f"{t.ref_bases[ref] / t.ref_lengths[ref]:.1f}", f"{t.fraction_of(ref):.4f}", _bool(ref == dom),
+                r.sample, r.barcode, _bool(r.neg_control), ref, n, f"{100 * n / t.mapped:.1f}" if t.mapped else "NA",
+                t.ref_bases[ref], f"{t.mean_depth(ref):.1f}", f"{t.fraction_of(ref):.4f}", _bool(ref == dom),
             ])  # fmt: skip
     _write(path, header, records)
 

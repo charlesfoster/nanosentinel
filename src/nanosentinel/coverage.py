@@ -1,21 +1,21 @@
 """Per-sample depth tracking and 'time to target' (e.g. >=20x over >=90% of the genome)."""
 
 import csv
-import re
-import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 
+from .annotate import natural_key
+
 
 class SampleTracker:
-    """Tracks, per reference, how much of the (target region of the) genome is >= target_depth.
+    """Tracks, per reference, depth along the genome and how much of it is >= target_depth.
 
-    Depth is capped at ``target_depth`` (uint8), which is all that is needed to know when a position
-    first reaches the target. Reads are expected in (roughly) time order; the time recorded for the
-    moment of reaching target is the latest read start time seen so far, which keeps it monotonic.
+    Reads are expected in (roughly) time order; the time recorded for the moment the target is reached is the
+    latest read start time seen so far, which keeps it monotonic. Every alignment adds coverage to its reference,
+    but only a read's primary alignment counts as a read (read totals, length statistics, composition).
     """
 
     def __init__(self, ref_lengths, target_depth=20, target_fraction=0.9, masks=None):
@@ -29,7 +29,7 @@ class SampleTracker:
         self.masks = masks or {}
         self.depth, self.covered = {}, {}
         self.reads = self.mapped = self.bases = 0
-        self.ref_reads, self.ref_bases = Counter(), Counter()  # per-reference mapped reads / aligned bases
+        self.ref_reads, self.ref_bases = Counter(), Counter()  # per-reference primary reads / aligned bases
         self.len_counts = Counter()  # read length -> number of reads (all reads, mapped or not)
         self.series = []  # (time, reads, mapped, bases, best_reference, best_fraction), one per annotation file
         self.first = self.latest = None
@@ -41,11 +41,12 @@ class SampleTracker:
         mask = self.masks.get(ref)
         return int(mask.sum()) if mask is not None else self.ref_lengths[ref]
 
-    def add(self, ref, start, end, when=None, read_len=0):
-        """Add one annotated read. Returns True the first time the target is reached."""
-        self.reads += 1
-        if read_len > 0:
-            self.len_counts[read_len] += 1
+    def add(self, ref, start, end, when=None, read_len=0, primary=True):
+        """Add one alignment row. Returns True the first time the target is reached."""
+        if primary:
+            self.reads += 1
+            if read_len > 0:
+                self.len_counts[read_len] += 1
         if when is not None:
             if self.latest is None or when > self.latest:
                 self.latest = when
@@ -57,13 +58,14 @@ class SampleTracker:
         start, end = max(0, start), min(end, length)
         if end <= start:
             return False
-        self.mapped += 1
-        self.bases += end - start
-        self.ref_reads[ref] += 1
-        self.ref_bases[ref] += end - start
+        if primary:
+            self.mapped += 1
+            self.bases += end - start
+            self.ref_reads[ref] += 1
+            self.ref_bases[ref] += end - start
         depth = self.depth.get(ref)
         if depth is None:
-            depth = self.depth[ref] = np.zeros(length, dtype=np.uint8)
+            depth = self.depth[ref] = np.zeros(length, dtype=np.uint32)
             self.covered[ref] = 0
         seg = depth[start:end]
         arriving = seg == self.target - 1
@@ -71,7 +73,7 @@ class SampleTracker:
         if mask is not None:
             arriving &= mask[start:end]
         self.covered[ref] += int(np.count_nonzero(arriving))
-        seg += seg < self.target  # in-place on the view: cap at target
+        seg += 1  # in place on the view
         if not self.reached and self.fraction_of(ref) >= self.fraction - 1e-12:
             self.reached = True
             self.reached_at, self.reached_ref = self.latest, ref
@@ -87,7 +89,7 @@ class SampleTracker:
         self.series.append((self.latest, self.reads, self.mapped, self.bases, ref, frac))
 
     def dominant(self):
-        """Reference with the most mapped reads, or None."""
+        """Reference with the most primary reads, or None."""
         return max(self.ref_reads, key=self.ref_reads.get) if self.ref_reads else None
 
     def length_stats(self):
@@ -125,9 +127,26 @@ class SampleTracker:
         ref = max(self.covered, key=self.fraction_of)
         return ref, self.fraction_of(ref)
 
+    def mean_depth(self, ref):
+        depth = self.depth.get(ref)
+        return float(depth.mean()) if depth is not None else 0.0
 
-def _natural_key(path):
-    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", Path(path).name)]
+    def binned_depth(self, ref, nbins=300):
+        """Mean depth in ``nbins`` equal windows along ``ref`` (None if the reference has no coverage)."""
+        depth = self.depth.get(ref)
+        if depth is None:
+            return None
+        nbins = min(nbins, len(depth))
+        edges = np.linspace(0, len(depth), nbins + 1).astype(int)
+        sums = np.add.reduceat(depth.astype(np.float64), edges[:-1])
+        return (sums / np.diff(edges)).round(1).tolist()
+
+    def amplicon_depths(self, ref, amplicons):
+        """Median depth of each amplicon span on ``ref`` (None if the reference has no coverage)."""
+        depth = self.depth.get(ref)
+        if depth is None:
+            return None
+        return [float(np.median(depth[min(s, len(depth)) : min(e, len(depth))])) if e > s else 0.0 for s, e in amplicons]
 
 
 def parse_time(text):
@@ -138,49 +157,51 @@ def parse_time(text):
 
 
 class AnnotationReader:
-    """Incrementally feeds RAMPART's per-file annotation CSVs (annotations/<barcode>/*.csv) to trackers."""
+    """Feeds the annotation files (annotations/<barcode>/*.tsv) to the trackers as they appear."""
 
-    def __init__(self, annotation_dir, trackers, min_age=2.0):
+    def __init__(self, annotation_dir, trackers, panel_hash):
         self.dir = Path(annotation_dir)
         self.trackers = trackers  # barcode -> SampleTracker
-        self.min_age = min_age
+        self.panel_hash = panel_hash
         self.done = set()
         self.run_start = None
         self.changed = False  # new data since the reports were last written
 
-    def poll(self, final=False, now=None):
-        """Read any new, finished CSVs. Returns the barcodes that reached target during this poll."""
-        now = time.time() if now is None else now
+    def poll(self):
+        """Read any new annotation files. Returns the barcodes that reached target during this poll."""
         newly = []
         for barcode, tracker in self.trackers.items():
             folder = self.dir / barcode
             if not folder.is_dir():
                 continue
-            for path in sorted(folder.glob("*.csv"), key=_natural_key):
+            for path in sorted(folder.glob("*.tsv"), key=natural_key):
                 if path in self.done:
                     continue
-                if not final and now - path.stat().st_mtime < self.min_age:
-                    break  # still being written; later files in order are even newer
+                result = self._read_file(path, tracker)
+                if result is None:
+                    continue  # made against a different panel: the annotator will redo it
                 self.done.add(path)
                 self.changed = True
-                if self._read_file(path, tracker) and barcode not in newly:
+                if result and barcode not in newly:
                     newly.append(barcode)
             if tracker.first and (self.run_start is None or tracker.first < self.run_start):
                 self.run_start = tracker.first
         return newly
 
-    @staticmethod
-    def _read_file(path, tracker):
+    def _read_file(self, path, tracker):
         reached = False
         with open(path, newline="") as fh:
-            for row in csv.DictReader(fh):
+            if f"panel={self.panel_hash}" not in fh.readline():
+                return None
+            for row in csv.DictReader(fh, delimiter="\t"):
                 try:
-                    ref = row["best_reference"]
-                    start, end = int(row["start_coords"]), int(row["end_coords"])
+                    ref = row["ref"]
+                    start, end = int(row["start"]), int(row["end"])
                     read_len = int(row["read_len"])
+                    primary = row["primary"] == "1"
                 except (KeyError, ValueError, TypeError):
-                    continue  # truncated / malformed line
-                if tracker.add(ref, start, end, parse_time(row.get("start_time", "")), read_len):
+                    continue  # malformed line
+                if tracker.add(ref, start, end, parse_time(row.get("start_time", "")), read_len, primary):
                     reached = True
         tracker.snapshot()
         return reached

@@ -1,22 +1,24 @@
 # nanosentinel
 
-Monitor a live Oxford Nanopore run with [RAMPART](https://github.com/artic-network/rampart), using a samplesheet in
-the same format as h2seq's (so one sheet can serve both), and record how long each sample takes to reach a target depth.
+Monitor a live Oxford Nanopore run from a samplesheet (in the same format as h2seq's, so one sheet can serve both):
+reads are mapped as MinKNOW writes them, coverage is shown on a local dashboard, and the time each sample takes to
+reach a target depth is recorded. Optionally concatenates each sample's reads for analysis afterwards.
 
-- Generates the RAMPART protocol (references, genome, primer scheme, coverage thresholds) from plain FASTA / BED / GFF
-  files, so there are no hand-maintained protocol folders. It is independent of h2seq; you can simply reuse the same
-  reference and primer files.
-- Quiet terminal: one status line, a few event messages. RAMPART's own output goes to `rampart.log`.
-- Writes `time_to_target.tsv`: when each sample first reached `--target_depth` over `--target_fraction` of the
-  genome (default 20x over 90%), measured in sequencing time from the reads' own timestamps.
-- Notifies you when every non-control sample has reached target; monitoring continues until you stop it.
+- **Dashboard** on a local port: per-sample progress to target, genome coverage with amplicons and genes, reference
+  composition, amplicon-by-sample depth (dropouts show as hatched cells), progress curves and read lengths. A
+  self-contained `dashboard.html` snapshot is written when you stop, so you keep a record of the run.
+- Sequencing-time **time to target**: when each sample first reached `--target_depth` over `--target_fraction` of the
+  genome (default 20x over 90%), measured from the reads' own timestamps. You are notified when every non-control sample
+  has reached it; monitoring continues until you stop it.
+- Handles **several similar references** in the panel: a read that fits sibling genotypes equally well counts towards
+  all of them, so coverage is not split between near-identical references.
 - Waits automatically if MinKNOW has not created the run's `fastq_pass` folder yet.
-- Records progress over time and writes end-of-run summaries (read counts, read length statistics, per-reference composition).
-- Optionally concatenates each sample's reads and writes an h2seq-ready samplesheet.
+- Quiet terminal: one status line and a few event messages. Everything is also logged to `nanosentinel.log`.
 
 ## Install
 
-Needs [pixi](https://pixi.sh). The environment (RAMPART, minimap2, Snakemake, ...) installs itself on first run.
+Needs [pixi](https://pixi.sh). The environment (Python, minimap2, numpy) installs itself on first run, and again if
+`pixi.lock` changes. Works on Linux and macOS.
 
 ```bash
 git clone <this repo> ~/Programs/nanosentinel
@@ -53,32 +55,38 @@ nanosentinel --input samplesheet.csv --run_name 2026-11-09_run \
     --possible_references references.fasta --primer_bed primers.bed
 ```
 
-Opens RAMPART at <http://localhost:6010>. If the run has not started yet it waits for `fastq_pass` to appear (Ctrl+C to
-cancel). Press **Enter** or **Ctrl+C** to stop.
+Opens the dashboard at <http://localhost:6010>. If the run has not started yet it waits for `fastq_pass` to appear
+(Ctrl+C to cancel). Press **Enter** or **Ctrl+C** to stop.
+
+Inputs are ordinary files: `--possible_references` is a multi-FASTA panel the reads are mapped to (include one entry per
+genotype or subtype you might see), `--reference_fasta` picks the reference the primer scheme and genes are drawn
+against (default: the first panel entry), `--primer_bed` gives amplicons (ARTIC-style `<amplicon>_LEFT` /
+`<amplicon>_RIGHT` names on that reference) and `--gff` adds gene labels.
 
 Outputs in `nanosentinel_<run_name>/` (reports are refreshed about once a minute and written again when you stop):
 
 | file | contents |
 | --- | --- |
+| `dashboard.html` | Self-contained snapshot of the dashboard at the end of monitoring (opens straight from disk). |
 | `time_to_target.tsv` | When each sample first reached the target (sequencing time), with reads at that point and the reference it was reached on. |
-| `coverage_timeseries.tsv` | Progress over time: one line per sample per annotation file with reads, mapped bases and the best fraction at target depth. Plot `elapsed_min` against `best_fraction`. |
-| `sample_summary.tsv` | Per sample: reads, % mapped, dominant reference and its mean depth, and read length statistics (mean, median, N50, min, max) for all reads. |
-| `reference_summary.tsv` | Per sample per reference that received reads: read share, estimated mean depth and fraction at target depth. Shows genotype composition and mixed samples. |
-| `nanosentinel.log`, `rampart.log` | The tool's log and RAMPART's (very chatty) output. |
-| `annotations/`, `rampart_protocol/` | RAMPART's per-file annotation CSVs and the protocol generated for this run. |
+| `coverage_timeseries.tsv` | Progress over time: one line per sample per annotation file with reads, mapped bases and the best fraction at target depth. |
+| `sample_summary.tsv` | Per sample: reads, % mapped, dominant reference and its mean depth, and read length statistics (mean, median, N50, min, max). |
+| `reference_summary.tsv` | Per sample per reference with coverage: primary read share, mean depth and fraction at target depth. Shows genotype composition and mixed samples. |
+| `annotations/` | One small TSV per FASTQ chunk (per-read alignments). Reused if you restart with the same `--outdir`. |
+| `reference/` | The reference panel and its minimap2 index. |
+| `nanosentinel.log` | The tool's log. |
 
 In `sample_summary.tsv`, `dominant_reference` is the reference with the most reads, while `best_fraction` is the highest
 fraction at target depth over any reference; they can differ when a sample's reads split between similar references.
 
 Useful options (see `--help` for all):
 
-- `--reference_fasta` coordinate reference the coverage plot is drawn against (default: first panel entry); `--gff` adds genes.
 - `--denominator amplicons` measures the fraction over the primer-scheme span instead of the whole genome.
-- `--target_depth`, `--target_fraction`, `--webhook URL`, `--rampart_port`, `--no_browser`.
+- `--target_depth`, `--target_fraction`, `--min_identity`, `--webhook URL`, `--port`, `--no_browser`.
+- `--host 0.0.0.0` to view the dashboard from another machine on the network (there is no authentication).
 - `--run_dir` points at an exact MinKNOW run folder (use it if a run name matches more than one folder).
-- `--dry_run` checks the inputs and writes the protocol without launching anything.
-
-Restarting with the same `--outdir` reuses earlier annotations; add `--clear_annotations` to start afresh.
+- `--dry_run` checks the inputs and builds the reference index without monitoring.
+- `--clear_annotations` discards earlier annotations and maps every read again.
 
 ## Concatenate reads for analysis
 
@@ -95,21 +103,22 @@ nanosentinel --input samplesheet.csv --run_name 2026-11-09_run --skip_monitor --
 ```
 
 This writes `reads/<sample>_<run>_<barcode>.fastq.gz` and `samplesheet_with_reads.csv` (this run's rows, `long_reads`
-filled in) ready for `nextflow run charlesfoster/h2seq --input samplesheet_with_reads.csv`. Gzipped FASTQs are joined without
-recompression; `--gzip` compresses plain-text input.
+filled in) ready to pass to an analysis pipeline. Gzipped FASTQs are joined without recompression; `--gzip` compresses
+plain-text input.
 
 ## Known limitations
 
-- Coverage is estimated from RAMPART's per-read start/end coordinates (no CIGAR, no MAPQ), so it is slightly
-  optimistic; h2seq's depth is the final word. Depth is tracked per sample against each reference in the panel and the
-  best one is reported, so a sample whose reads split across near-identical references is under-counted.
-- Read quality is not reported: RAMPART's annotations hold read lengths but not quality scores.
-- RAMPART ignores reads under any hidden (dot-prefixed) folder, so nanosentinel refuses to start if the `fastq_pass` path contains one.
+- Coverage comes from minimap2 alignment spans (deletions count as covered). It is a monitoring estimate; the depth from
+  your final analysis is the arbiter.
+- Reads are mapped to the panel, not to one chosen reference per sample. A read credited to a sibling reference counts
+  towards that reference's coverage, so for similar genotypes `best_reference` can be any of the near-equal siblings.
+- Read quality is not reported (only lengths); that would need the FASTQs to be read.
 - Run time is measured from the first read of any listed barcode, not from the start of the run.
-- RAMPART 1.2.0 ignores `--annotatedPath`; nanosentinel works around it by running RAMPART with the output directory as its working directory.
+- The dashboard has no authentication; keep it on `127.0.0.1` (the default) unless you are on a trusted network.
 
 ## Development
 
 ```bash
 pixi run -e dev pytest
+python dev/make_fake_run.py reads.fastq.gz OUT_DIR   # a fake MinKNOW run to try it on (use --minknow_data OUT_DIR --run_name exp1)
 ```

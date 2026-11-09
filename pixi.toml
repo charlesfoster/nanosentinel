@@ -8,11 +8,8 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-rampart = { version = "1.2.0.*", channel = "artic-network" }
 minimap2 = ">=2.31,<3"
 python = "3.12.*"
-snakemake-minimal = ">=9.27.1,<10"
-biopython = ">=1.88,<2"
 numpy = ">=2.5.4,<3"
 
 [feature.dev.dependencies]

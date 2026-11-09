@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nanosentinel</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb; --surface-2: #f4f3f0; --grid: #e4e3df;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; --series-6: #6250d6;
+  --other: #a9a8a1;
+  --good: #0ca30c; --critical: #d03b3b;
+  --seq-0: #cde2fb; --seq-1: #86b6ef; --seq-2: #3987e5; --seq-3: #1c5cab; --seq-4: #0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --surface-2: #242423; --grid: #353533;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e87;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #9085e9;
+    --other: #6b6a64;
+    --seq-0: #0d366b; --seq-1: #1c5cab; --seq-2: #3987e5; --seq-3: #86b6ef; --seq-4: #cde2fb;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --surface-2: #242423; --grid: #353533;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e87;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #9085e9;
+  --other: #6b6a64;
+  --seq-0: #0d366b; --seq-1: #1c5cab; --seq-2: #3987e5; --seq-3: #86b6ef; --seq-4: #cde2fb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-1); color: var(--text-primary); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+h1 { font-size: 18px; margin: 0; font-weight: 600; }
+h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+.sub { color: var(--text-secondary); }
+.spacer { flex: 1; }
+button { font: inherit; color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--grid); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--grid); }
+.tiles { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.tile { flex: 1 1 150px; background: var(--surface-2); border-radius: 8px; padding: 10px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 24px; font-weight: 600; }
+.card { border: 1px solid var(--grid); border-radius: 8px; padding: 12px 14px; margin-top: 16px; }
+.card .note { color: var(--text-secondary); font-size: 12px; margin: 0 0 8px; }
+.warn { margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); border-left: 4px solid var(--critical); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--grid); }
+td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--surface-2); }
+tbody tr.sel { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--series-1); }
+.muted { color: var(--text-muted); }
+.ctrl { font-size: 11px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--text-muted); color: var(--text-secondary); margin-left: 6px; }
+.bar { position: relative; width: 150px; height: 8px; border-radius: 4px; background: var(--grid); display: inline-block; vertical-align: middle; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--series-1); }
+.bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-secondary); }
+.ok { color: var(--good); font-weight: 700; margin-right: 4px; }
+.scroll { overflow-x: auto; }
+svg { display: block; max-width: 100%; }
+svg text { fill: var(--text-muted); font: 11px system-ui, sans-serif; }
+svg .lbl { fill: var(--text-secondary); }
+svg .halo { paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--c, var(--other)); }
+.seg { display: inline-flex; gap: 0; margin-left: 12px; vertical-align: middle; }
+.seg button { border-radius: 0; padding: 1px 10px; font-size: 12px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.mini { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--grid); }
+.mini-head { display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: baseline; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.mini-head b { color: var(--text-primary); font-size: 13px; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 24px; color: var(--text-secondary); margin-bottom: 8px; }
+.stats b { color: var(--text-primary); font-weight: 600; }
+#tip { position: fixed; pointer-events: none; z-index: 10; background: var(--text-primary); color: var(--surface-1); padding: 4px 8px; border-radius: 6px; font-size: 12px; display: none; max-width: 320px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>nanosentinel</h1><span class="sub" id="runname"></span><span class="badge" id="state"></span>
+    <span class="spacer"></span><span class="sub" id="updated"></span><button id="theme" aria-label="Toggle light and dark theme">Theme</button>
+  </header>
+  <div id="warnings"></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="card"><h2>Samples</h2><p class="note" id="tablenote"></p><div class="scroll"><table id="samples"></table></div></div>
+  <div class="card" id="detail"></div>
+  <div class="card"><h2>Progress to target</h2><p class="note" id="progressnote"></p><div id="progress"></div></div>
+  <div class="card" id="ampcard" hidden><h2>Amplicon depth</h2><p class="note" id="ampnote"></p><div class="scroll" id="amp"></div></div>
+  <div class="card"><h2>Read lengths</h2><p class="note">All reads from the listed barcodes.</p><div id="hist"></div></div>
+</div>
+<div id="tip" role="tooltip"></div>
+<script>
+"use strict";
+let D = /*__DATA__*/null, sel = null, hover = null;
+const FINAL = D !== null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const nf = (n) => (n == null ? "–" : Math.round(n).toLocaleString());
+const pct = (f) => (f == null ? "–" : (100 * f).toFixed(f >= 0.995 || f === 0 ? 0 : 1) + "%");
+const hms = (s) => { if (s == null) return "–"; s = Math.max(0, Math.round(s)); const p = (x) => String(x).padStart(2, "0"); return p(Math.floor(s / 3600)) + ":" + p(Math.floor(s % 3600 / 60)) + ":" + p(s % 60); };
+const SLOTS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)", "var(--series-5)", "var(--series-6)"];
+const refColour = new Map();                        // colour follows the reference, once assigned
+const colourOf = (ref) => { if (ref === "Other") return "var(--other)"; if (!refColour.has(ref)) refColour.set(ref, refColour.size < SLOTS.length ? SLOTS[refColour.size] : "var(--other)"); return refColour.get(ref); };
+const lin = (d0, d1, r0, r1) => (v) => r0 + (d1 === d0 ? 0 : (v - d0) / (d1 - d0)) * (r1 - r0);
+function ticks(max, n, cover) { const raw = max / n, mag = Math.pow(10, Math.floor(Math.log10(raw || 1))), step = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw) || mag; const out = []; for (let v = 0; v <= max + 1e-9; v += step) out.push(v); if (cover && out[out.length - 1] < max - 1e-9) out.push(out[out.length - 1] + step); return out; }
+const width = (el, min) => Math.max(min || 320, el.clientWidth || 600);
+
+// ---- tooltip ---------------------------------------------------------------------------------------------------
+const tip = $("tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = "block"; const r = tip.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX + 12, innerWidth - r.width - 8) + "px"; tip.style.top = Math.min(ev.clientY + 14, innerHeight - r.height - 8) + "px"; }
+const hideTip = () => { tip.style.display = "none"; };
+
+// ---- header / table -------------------------------------------------------------------------------------------
+function renderTop() {
+  const real = D.samples.filter((s) => !s.control), done = real.filter((s) => s.reached).length;
+  $("runname").textContent = D.run;
+  $("state").textContent = FINAL ? "final snapshot" : (online ? "live" : "disconnected");
+  $("updated").textContent = "updated " + D.updated;
+  $("tiles").innerHTML = [["Run time", hms(D.elapsed_s)], ["Reads", nf(D.reads)], ["Samples at target", done + " / " + real.length],
+    ["Target", D.target_depth + "x over " + pct(D.target_fraction) + (D.denominator === "amplicons" ? " of amplicons" : " of genome")]]
+    .map(([l, v]) => `<div class="tile"><div class="label">${l}</div><div class="value">${esc(v)}</div></div>`).join("");
+  $("warnings").innerHTML = D.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join("");
+}
+function spark(s) {
+  const pts = s.series; if (pts.length < 2) return "";
+  const W = 90, H = 22, x = lin(0, Math.max(...pts.map((p) => p[0])) || 1, 2, W - 2), y = lin(0, 1, H - 3, 3);
+  return `<svg width="${W}" height="${H}" aria-hidden="true"><path d="M${pts.map((p) => x(p[0]).toFixed(1) + "," + y(p[1]).toFixed(1)).join("L")}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+function renderTable() {
+  $("tablenote").textContent = "Click a sample for its coverage. The bar is the fraction of the target region at ≥" + D.target_depth + "x (tick = " + pct(D.target_fraction) + ").";
+  const head = ["Sample", "Reads", "Mapped", "Most covered reference", "Covered at ≥" + D.target_depth + "x", "Status", "Trend", "Median length"].map((h, i) => `<th class="${[1, 2, 7].includes(i) ? "n" : ""}">${h}</th>`).join("");
+  const body = D.samples.map((s) => {
+    const status = s.control ? '<span class="muted">control</span>' : s.reached ? `<span class="ok" aria-hidden="true">✓</span>reached ${hms(s.reached_s)}` : '<span class="muted">not yet</span>';
+    return `<tr data-s="${esc(s.name)}" class="${s.name === sel ? "sel" : ""}" tabindex="0"><td>${esc(s.name)}${s.control ? '<span class="ctrl">control</span>' : ""} <span class="muted">${s.barcode}</span></td>
+      <td class="n">${nf(s.reads)}</td><td class="n">${s.mapped_pct == null ? "–" : s.mapped_pct + "%"}</td><td>${esc(s.best_ref || "–")}</td>
+      <td><span class="bar"><i style="width:${Math.min(100, 100 * s.best_fraction)}%"></i><b style="left:${100 * D.target_fraction}%"></b></span> <span class="n">${pct(s.best_fraction)}</span></td>
+      <td>${status}</td><td>${spark(s)}</td><td class="n">${nf(s.median_len)}</td></tr>`;
+  }).join("");
+  $("samples").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  $("samples").querySelectorAll("tbody tr").forEach((tr) => { const pick = () => { sel = tr.dataset.s; render(); }; tr.onclick = pick; tr.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }; });
+}
+
+// ---- coverage plots: the selected sample, or every sample stacked ------------------------------------------------
+let mode = location.hash === "#all" ? "all" : "one";
+function coveragePlot(s, o) {
+  const c = s.coverage; if (!c || !c.bins) return '<p class="muted">No reads mapped yet.</p>';
+  const W = o.width, H = o.height, m = { l: 48, r: 14, t: o.genes ? 26 : 8, b: o.compact ? 22 : 28 }, n = c.bins.length;
+  const x = lin(1, c.length, m.l, W - m.r), top = Math.max(...c.bins, D.target_depth * 1.25), yt = ticks(top, o.compact ? 3 : 4, true), y = lin(0, yt[yt.length - 1], H - m.b, m.t);
+  const onCoord = c.ref === D.coordinate_ref;
+  let g = "";
+  yt.forEach((v) => { g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${nf(v)}</text>`; });
+  ticks(c.length, 6).forEach((v) => { g += `<text x="${x(Math.max(v, 1))}" y="${H - (o.compact ? 6 : 8)}" text-anchor="middle">${nf(v)}</text>`; });
+  if (onCoord) D.amplicons.forEach(([a, b], i) => { if (i % 2 === 0) g += `<rect x="${x(a)}" y="${m.t}" width="${Math.max(1, x(b) - x(a))}" height="${H - m.b - m.t}" fill="var(--surface-2)"/>`; });
+  const step = (c.length) / n, px = (i) => x(1 + (i + 0.5) * step);
+  const line = c.bins.map((v, i) => px(i).toFixed(1) + "," + y(v).toFixed(1)).join("L");
+  g += `<path d="M${px(0)},${y(0)}L${line}L${px(n - 1)},${y(0)}Z" fill="var(--series-1)" fill-opacity="0.12"/><path d="M${line}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(D.target_depth)}" y2="${y(D.target_depth)}" stroke="var(--text-secondary)"/><text class="lbl halo" x="${W - m.r}" y="${y(D.target_depth) - 4}" text-anchor="end">target ${D.target_depth}x</text>`;
+  if (onCoord && o.genes) D.genes.forEach((gn) => { const a = x(gn.start), b = x(gn.end); g += `<rect x="${a}" y="4" width="${Math.max(1, b - a)}" height="14" rx="3" fill="var(--surface-2)" stroke="var(--grid)"/>`; if (b - a > gn.name.length * 6.5 + 6) g += `<text class="lbl" x="${(a + b) / 2}" y="15" text-anchor="middle">${esc(gn.name)}</text>`; });
+  g += `<line class="xh" y1="${m.t}" y2="${H - m.b}" stroke="var(--text-secondary)" visibility="hidden"/>`;
+  return `<div class="scroll"><svg class="cov" data-s="${esc(s.name)}" width="${W}" height="${H}" role="img" aria-label="Depth along ${esc(c.ref)} for ${esc(s.name)}">${g}</svg></div>`;
+}
+function bindCoverage(svg, s) {
+  const c = s.coverage, xh = svg.querySelector(".xh"); if (!c || !xh) return;
+  const W = +svg.getAttribute("width"), mL = 48, mR = 14, x = lin(1, c.length, mL, W - mR);
+  const hideX = () => { hideTip(); xh.setAttribute("visibility", "hidden"); };
+  svg.onpointermove = (ev) => { const r = svg.getBoundingClientRect(), px = ev.clientX - r.left; if (px < mL || px > W - mR) return hideX();
+    const pos = Math.round(1 + (px - mL) / (W - mL - mR) * (c.length - 1)), i = Math.min(c.bins.length - 1, Math.floor((pos - 1) / c.length * c.bins.length));
+    xh.setAttribute("x1", x(pos)); xh.setAttribute("x2", x(pos)); xh.setAttribute("visibility", "visible");
+    showTip(ev, `${esc(s.name)} · ${esc(c.ref)}<br>position ${nf(pos)}<br>mean depth ${c.bins[i].toLocaleString()}x`); };
+  svg.onpointerleave = hideX;
+}
+function viewToggle() {
+  const b = (m, label) => `<button data-m="${m}" aria-pressed="${mode === m}">${label}</button>`;
+  return `<span class="seg" role="group" aria-label="Coverage view">${b("one", "Selected sample")}${b("all", "All samples")}</span>`;
+}
+function bindToggle() {
+  $("detail").querySelectorAll(".seg button").forEach((btn) => { btn.onclick = () => { mode = btn.dataset.m; try { history.replaceState(null, "", mode === "all" ? "#all" : location.pathname + location.search); } catch (e) {} render(); }; });
+}
+function renderAll() {
+  const el = $("detail"), W = Math.max(320, el.clientWidth - 28);
+  const rows = D.samples.map((s, i) => `<div class="mini"><div class="mini-head" data-s="${esc(s.name)}" title="Show this sample on its own"><b>${esc(s.name)}</b>
+    <span class="muted">${s.barcode}${s.control ? " · control" : ""}${s.coverage ? " · " + esc(s.coverage.ref) : ""}</span>
+    <span>${s.reached ? '<span class="ok" aria-hidden="true">✓</span>' : ""}covered ${pct(s.best_fraction)} at ≥${D.target_depth}x</span>
+    <span>mean depth ${s.mean_depth == null ? "–" : s.mean_depth + "x"}</span><span>${nf(s.reads)} reads</span></div>
+    ${coveragePlot(s, { width: W, height: 140, compact: true, genes: i === 0 })}</div>`).join("");
+  el.innerHTML = `<h2>Coverage by sample ${viewToggle()}</h2><p class="note">Each plot has its own depth scale. Click a sample's name to view it on its own.</p>${rows}`;
+  bindToggle();
+  el.querySelectorAll("svg.cov").forEach((svg) => bindCoverage(svg, D.samples.find((v) => v.name === svg.dataset.s)));
+  el.querySelectorAll(".mini-head").forEach((h) => { h.onclick = () => { sel = h.dataset.s; mode = "one"; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} render(); }; });
+}
+function renderDetail() {
+  if (mode === "all") return renderAll();
+  const s = D.samples.find((v) => v.name === sel) || D.samples[0]; if (!s) { $("detail").innerHTML = ""; return; }
+  sel = s.name;
+  const comp = s.composition, tot = comp.reduce((a, [, k]) => a + k, 0);
+  let bar = "";
+  if (tot) { const W = Math.max(300, $("detail").clientWidth - 28); let x0 = 0; comp.forEach(([ref, k], i) => { const w = k / tot * W; bar += `<rect data-r="${esc(ref)}" data-k="${k}" x="${x0 + (i ? 1 : 0)}" y="0" width="${Math.max(0, w - (i ? 2 : 1))}" height="20" rx="4" fill="${colourOf(ref)}"/>`; x0 += w; }); bar = `<svg id="comp" width="${W}" height="20" role="img" aria-label="Reference composition">${bar}</svg>`; }
+  $("detail").innerHTML = `<h2>${esc(s.name)} <span class="muted">${s.barcode}${s.control ? " · negative control" : ""}</span>${viewToggle()}</h2>
+    <div class="stats"><span>Reads <b>${nf(s.reads)}</b></span><span>Mapped <b>${s.mapped_pct == null ? "–" : s.mapped_pct + "%"}</b></span><span>Covered at ≥${D.target_depth}x <b>${pct(s.best_fraction)}</b></span>
+    <span>Mean depth <b>${s.mean_depth == null ? "–" : s.mean_depth + "x"}</b></span><span>Median length <b>${nf(s.median_len)}</b></span><span>N50 <b>${nf(s.n50)}</b></span></div>
+    ${coveragePlot(s, { width: Math.max(320, $("detail").clientWidth - 28), height: 230, compact: false, genes: true })}
+    ${s.coverage && s.coverage.ref !== D.coordinate_ref && D.amplicons.length ? '<p class="note">Amplicons and genes are drawn for ' + esc(D.coordinate_ref) + " only; this sample's most covered reference is " + esc(s.coverage.ref) + ".</p>" : ""}
+    <h2 style="margin-top:12px">Reference composition <span class="muted">(primary alignments)</span></h2>${bar || '<p class="muted">No mapped reads yet.</p>'}
+    <div class="legend">${comp.map(([ref, k]) => `<span style="--c:${colourOf(ref)}">${esc(ref)} · ${nf(k)} (${(100 * k / tot).toFixed(0)}%)</span>`).join("")}</div>`;
+  bindToggle();
+  const svg = $("detail").querySelector("svg.cov"); if (svg) bindCoverage(svg, s);
+  const cb = $("comp"); if (cb) { cb.querySelectorAll("rect").forEach((r) => { r.onpointermove = (ev) => showTip(ev, `${esc(r.dataset.r)}<br>${nf(+r.dataset.k)} reads (${(100 * r.dataset.k / tot).toFixed(1)}%)`); r.onpointerleave = hideTip; }); }
+}
+
+// ---- progress over time ------------------------------------------------------------------------------------------
+function renderProgress() {
+  const all = D.samples.filter((s) => s.series.length), el = $("progress");
+  $("progressnote").textContent = "Fraction of the target region at ≥" + D.target_depth + "x against run time. Hover a line to identify the sample; click to select it.";
+  if (!all.length) { el.innerHTML = '<p class="muted">Waiting for reads.</p>'; return; }
+  const W = width(el), H = 250, m = { l: 48, r: 14, t: 12, b: 30 }, maxT = Math.max(1, ...all.map((s) => s.series[s.series.length - 1][0]));
+  const unit = maxT > 180 ? 60 : 1, label = unit === 60 ? "hours" : "minutes", x = lin(0, maxT / unit, m.l, W - m.r), y = lin(0, 1, H - m.b, m.t);
+  let g = "";
+  [0, 0.25, 0.5, 0.75, 1].forEach((v) => { g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${100 * v}%</text>`; });
+  ticks(maxT / unit, 6).forEach((v) => { g += `<text x="${x(v)}" y="${H - 12}" text-anchor="middle">${v}</text>`; });
+  g += `<text x="${W - m.r}" y="${H - 1}" text-anchor="end" class="lbl">run time (${label})</text>`;
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(D.target_fraction)}" y2="${y(D.target_fraction)}" stroke="var(--text-secondary)"/><text class="lbl halo" x="${W - m.r}" y="${y(D.target_fraction) - 4}" text-anchor="end">target ${pct(D.target_fraction)}</text>`;
+  all.forEach((s) => { const d = s.series.map((p) => x(p[0] / unit).toFixed(1) + "," + y(p[1]).toFixed(1)).join("L"); const on = s.name === hover || s.name === sel;
+    g += `<path data-s="${esc(s.name)}" d="M${d}" fill="none" stroke="${s.control ? "var(--text-muted)" : "var(--series-1)"}" stroke-opacity="${on ? 1 : 0.45}" stroke-width="${on ? 3 : 2}" stroke-linejoin="round"/>`; });
+  el.innerHTML = `<div class="scroll"><svg id="prog" width="${W}" height="${H}" role="img" aria-label="Progress to target for each sample">${g}</svg></div>`;
+  const svg = $("prog");
+  svg.onpointermove = (ev) => { const r = svg.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top; let best = null, bd = 1e9, bp = null;
+    all.forEach((s) => s.series.forEach((p) => { const dx = x(p[0] / unit) - px, dy = y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = s; bp = p; } }));
+    if (best && bd < 900) { if (hover !== best.name) { hover = best.name; renderProgressLines(); } showTip(ev, `${esc(best.name)}<br>${bp[0]} min · ${pct(bp[1])}`); } else { hover = null; hideTip(); } };
+  svg.onpointerleave = () => { hover = null; hideTip(); renderProgressLines(); };
+  svg.onclick = () => { if (hover) { sel = hover; render(); } };
+  function renderProgressLines() { svg.querySelectorAll("path[data-s]").forEach((p) => { const on = p.dataset.s === hover || p.dataset.s === sel; p.setAttribute("stroke-opacity", on ? 1 : 0.45); p.setAttribute("stroke-width", on ? 3 : 2); }); }
+}
+
+// ---- amplicon heatmap -----------------------------------------------------------------------------------------------
+function renderAmp() {
+  const card = $("ampcard"), rows = D.samples.filter((s) => s.amp);
+  card.hidden = !D.amplicons.length; if (card.hidden) return;
+  $("ampnote").textContent = "Median depth of each amplicon on " + D.coordinate_ref + ". Cells are shaded by depth relative to the " + D.target_depth + "x target; hatched cells have no coverage (possible dropout).";
+  if (!rows.length) { $("amp").innerHTML = '<p class="muted">Waiting for reads.</p>'; return; }
+  const cw = Math.max(8, Math.min(26, Math.floor((width(card) - 190) / D.amplicons.length))), ch = 18, L = 150, T = 18, W = L + cw * D.amplicons.length + 8, H = T + ch * rows.length + 4;
+  const cls = (d) => (d < 1 ? -1 : d < 0.25 * D.target_depth ? 0 : d < 0.5 * D.target_depth ? 1 : d < D.target_depth ? 2 : 3);
+  let g = '<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface-1)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--critical)" stroke-width="2"/></pattern></defs>';
+  D.amplicons.forEach((_, i) => { if (i % Math.ceil(24 / cw) === 0) g += `<text x="${L + i * cw + cw / 2}" y="12" text-anchor="middle">${i + 1}</text>`; });
+  rows.forEach((s, r) => { g += `<text class="lbl" x="${L - 8}" y="${T + r * ch + 13}" text-anchor="end">${esc(s.name.length > 20 ? s.name.slice(0, 19) + "…" : s.name)}</text>`;
+    s.amp.forEach((d, i) => { const c = cls(d); g += `<rect data-s="${esc(s.name)}" data-i="${i}" x="${L + i * cw + 1}" y="${T + r * ch + 1}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="${c < 0 ? "url(#hatch)" : "var(--seq-" + (c + 1) + ")"}"/>`; }); });
+  $("amp").innerHTML = `<svg id="ampsvg" width="${W}" height="${H}" role="img" aria-label="Amplicon depth by sample">${g}</svg>
+    <div class="legend"><span style="--c:var(--critical)">no coverage</span><span style="--c:var(--seq-1)">&lt;25% of target</span><span style="--c:var(--seq-2)">25–50%</span><span style="--c:var(--seq-3)">50–100%</span><span style="--c:var(--seq-4)">at or above target</span></div>`;
+  $("ampsvg").querySelectorAll("rect[data-i]").forEach((r) => { r.onpointermove = (ev) => { const s = rows.find((v) => v.name === r.dataset.s), i = +r.dataset.i, [a, b] = D.amplicons[i];
+    showTip(ev, `${esc(s.name)}<br>amplicon ${i + 1} (${nf(a)}–${nf(b)})<br>median depth ${s.amp[i].toLocaleString()}x`); }; r.onpointerleave = hideTip; });
+}
+
+// ---- read length histogram ----------------------------------------------------------------------------------------
+function renderHist() {
+  const el = $("hist"), h = D.length_hist; if (!h.counts.length) { el.innerHTML = '<p class="muted">Waiting for reads.</p>'; return; }
+  const W = width(el), H = 170, m = { l: 56, r: 14, t: 8, b: 28 }, max = Math.max(...h.counts), yt = ticks(max, 3, true), y = lin(0, yt[yt.length - 1], H - m.b, m.t);
+  const bw = (W - m.l - m.r) / h.counts.length, x = (i) => m.l + i * bw;
+  let g = yt.map((v) => `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${nf(v)}</text>`).join("");
+  ticks(h.counts.length * h.width, 6).forEach((v) => { g += `<text x="${x(v / h.width)}" y="${H - 10}" text-anchor="middle">${nf(v)}</text>`; });
+  h.counts.forEach((k, i) => { if (k) g += `<rect data-i="${i}" x="${x(i) + 1}" y="${y(k)}" width="${Math.max(1, Math.min(24, bw) - 2)}" height="${y(0) - y(k)}" rx="2" fill="var(--series-1)"/>`; });
+  el.innerHTML = `<svg id="histsvg" width="${W}" height="${H}" role="img" aria-label="Read length histogram">${g}</svg>`;
+  $("histsvg").querySelectorAll("rect").forEach((r) => { r.onpointermove = (ev) => { const i = +r.dataset.i; showTip(ev, `${nf(i * h.width)}–${nf((i + 1) * h.width - 1)} bp<br>${nf(h.counts[i])} reads`); }; r.onpointerleave = hideTip; });
+}
+
+// ---- driver ----------------------------------------------------------------------------------------------------------------
+let online = true;
+function render() { if (!D || !D.samples) return; renderTop(); renderTable(); renderDetail(); renderProgress(); renderAmp(); renderHist(); }
+async function poll() {
+  try { const r = await fetch("data.json", { cache: "no-store" }); D = await r.json(); online = true; } catch (e) { online = false; }
+  if (D && D.samples) render(); else $("state").textContent = online ? "waiting for data" : "disconnected";
+  setTimeout(poll, 5000);
+}
+$("theme").onclick = () => { const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("sentinel-theme", root.dataset.theme); } catch (e) {} };
+try { const t = localStorage.getItem("sentinel-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+let resizeTimer; addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+if (FINAL) render(); else poll();
+</script>
+</body>
+</html>

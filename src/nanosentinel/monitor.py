@@ -1,20 +1,25 @@
-"""The live monitoring loop: RAMPART for display, our own tracking for time-to-target."""
+"""The live monitoring loop: annotate reads, track coverage, serve the dashboard, write reports."""
 
 import json
+import shutil
 import signal
+import socket
 import statistics
 import sys
 import threading
 import time
 import urllib.request
+import webbrowser
 
 import numpy as np
 
-from . import rampart, report
+from . import dashboard, report
+from .annotate import Annotator
 from .coverage import AnnotationReader, SampleTracker
 from .errors import MonitorError
-from .protocol import amplicon_mask_intervals
+from .references import amplicon_mask_intervals
 from .report import hms
+
 
 def build_trackers(rows, refinfo, target_depth, target_fraction, denominator="genome"):
     masks = {}
@@ -66,54 +71,72 @@ class StopSignal:
         return False
 
 
-def monitor(console, rows, refinfo, protocol_dir, fastq_pass, outdir, run_name, ports, target_depth, target_fraction,
-            denominator="genome", poll_interval=10, webhook=None, open_browser=True, clear_annotations=False):  # fmt: skip
-    rampart.check_tools()
-    rampart.check_path(fastq_pass)
-    rampart.check_ports(ports)
+def monitor(console, rows, refinfo, fastq_pass, outdir, run_name, host="127.0.0.1", port=6010, target_depth=20,
+            target_fraction=0.9, denominator="genome", poll_interval=5, webhook=None, open_browser=True,
+            clear_annotations=False, min_identity=0.8, threads=4):  # fmt: skip
+    with socket.socket() as s:
+        if s.connect_ex((host if host != "0.0.0.0" else "127.0.0.1", port)) == 0:
+            raise MonitorError(f"Port {port} is already in use (another nanosentinel running?). Use --port.")
     trackers = build_trackers(rows, refinfo, target_depth, target_fraction, denominator)
-    annotations = outdir / "annotations"  # RAMPART writes here because its working directory is outdir
-    reader = AnnotationReader(annotations, trackers)
-    rampart_log = outdir / "rampart.log"
+    annotations = outdir / "annotations"
+    if clear_annotations:
+        shutil.rmtree(annotations, ignore_errors=True)
+    reader = AnnotationReader(annotations, trackers, refinfo.panel_hash)
     samples = [r for r in rows if not r.neg_control]
     controls = [r for r in rows if r.neg_control]
     names = {r.barcode: r.sample for r in rows}
+
+    def snapshot_data(final=False):
+        return dashboard.build_data(run_name, rows, trackers, refinfo, reader.run_start, target_depth, target_fraction,
+                                    denominator, annotator.errors, final)  # fmt: skip
 
     def write_reports():
         report.write_all(outdir, rows, trackers, reader.run_start, target_depth, target_fraction, denominator)
         reader.changed = False
 
-    proc = rampart.launch(
-        protocol_dir, fastq_pass, [f"{r.barcode}={r.sample}" for r in rows], run_name, ports,
-        outdir, rampart_log, clear=clear_annotations,
-    )  # fmt: skip
+    annotator = Annotator(fastq_pass, [r.barcode for r in rows], annotations, refinfo, min_identity, threads, console.log)
+    try:
+        server = dashboard.DashboardServer(host, port)
+    except OSError as exc:
+        raise MonitorError(f"Cannot serve the dashboard on {host}:{port}: {exc}") from None
     stop = StopSignal()
     try:
-        if not rampart.wait_until_listening(proc, ports[0]):
-            raise MonitorError(f"RAMPART did not start. Last log lines ({rampart_log}):\n{rampart.tail(rampart_log)}")
+        server.start()
+        annotator.start()
         interactive = stop.install()
+        reader.poll()
+        server.update(snapshot_data())
+        url = f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}"
         if open_browser:
-            rampart.open_browser(ports[0])
-        console.say(f"RAMPART: http://localhost:{ports[0]}")
+            try:
+                webbrowser.open(url, new=1)
+            except Exception:
+                pass
+        console.say(f"Dashboard: {url}")
         console.say(f"Monitoring {len(samples)} sample(s) and {len(controls)} control(s) "
                     f"for >={target_depth}x over >={target_fraction:.0%} of the {denominator}")  # fmt: skip
         console.say("Press Enter or Ctrl+C to stop." if interactive else "Press Ctrl+C to stop.")
 
-        all_notified = False
-        last_poll = last_log = 0.0
+        all_notified = warned = False
+        last_poll = last_report = last_log = last_data = 0.0
         write_reports()
-        last_report = time.time()
         while not stop.event.is_set():
             now = time.time()
-            if proc.poll() is not None:
-                raise MonitorError(f"RAMPART exited unexpectedly. Last log lines ({rampart_log}):\n{rampart.tail(rampart_log)}")
             if now - last_poll >= poll_interval:
                 last_poll = now
+                seen = len(reader.done)
                 newly = reader.poll()
+                fresh = len(reader.done) != seen  # new annotation files were read in this poll
                 if newly:
                     _announce(console, newly, names, trackers, reader.run_start, {r.barcode for r in controls})
                     write_reports()
                     last_report = now
+                if fresh or now - last_data >= 30:
+                    server.update(snapshot_data())
+                    last_data = now
+                if annotator.errors and not warned:
+                    warned = True
+                    console.warn(annotator.errors[0] + (f" (+{len(annotator.errors) - 1} more, see the log)" if len(annotator.errors) > 1 else ""))
                 if not all_notified and samples and all(trackers[r.barcode].reached for r in samples):
                     all_notified = True
                     msg = f"All {len(samples)} non-control sample(s) have reached the target depth. Monitoring continues."
@@ -123,23 +146,27 @@ def monitor(console, rows, refinfo, protocol_dir, fastq_pass, outdir, run_name, 
             if reader.changed and now - last_report >= 60:
                 write_reports()
                 last_report = now
-            line = _status_line(trackers, samples, reader.run_start, interactive)
+            line = _status_line(trackers, samples, reader.run_start, interactive, annotator.files_annotated)
             console.status(line)
             if not console.tty and now - last_log >= 300:
                 last_log = now
                 console.say(line)
             stop.event.wait(0.5)
     finally:
-        # Ignore further interrupts only while RAMPART is being stopped, so a second Ctrl+C cannot orphan it.
+        # Ignore further interrupts only while shutting down, so a second Ctrl+C cannot leave anything half-stopped.
         old_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
         old_term = signal.signal(signal.SIGTERM, signal.SIG_IGN)
         console.end_status()
-        console.say("Stopping RAMPART ...")
-        rampart.stop(proc)
+        console.say("Stopping ...")
+        annotator.stop()
+        if annotator.is_alive():
+            annotator.join(15)
+        server.stop()
         signal.signal(signal.SIGINT, old_int if callable(old_int) else signal.default_int_handler)
         signal.signal(signal.SIGTERM, old_term if callable(old_term) else signal.SIG_DFL)
-        reader.poll(final=True)
+        reader.poll()
         write_reports()
+        dashboard.write_snapshot(outdir / "dashboard.html", snapshot_data(final=True))
     _summary(console, samples, controls, trackers, outdir)
 
 
@@ -157,7 +184,7 @@ def _announce(console, newly, names, trackers, run_start, control_barcodes):
         console.say(f"  {names[b]} reached target at run time {when}", bell=True)
 
 
-def _status_line(trackers, samples, run_start, interactive):
+def _status_line(trackers, samples, run_start, interactive, files):
     reads = sum(t.reads for t in trackers.values())
     done = sum(trackers[r.barcode].reached for r in samples)
     latest = max((t.latest for t in trackers.values() if t.latest), default=None)
@@ -168,7 +195,7 @@ def _status_line(trackers, samples, run_start, interactive):
 
 def _summary(console, samples, controls, trackers, outdir):
     done = [r for r in samples if trackers[r.barcode].reached]
-    console.say(f"Finished: {len(done)}/{len(samples)} sample(s) reached the target depth. Reports in {outdir}")
+    console.say(f"Finished: {len(done)}/{len(samples)} sample(s) reached the target depth. Reports and dashboard.html in {outdir}")
     for r in samples:
         t = trackers[r.barcode]
         if not t.reached:
