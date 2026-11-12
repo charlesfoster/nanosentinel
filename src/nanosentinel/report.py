@@ -9,6 +9,11 @@ def hms(seconds):
     return f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
 
 
+def describe_target(denominator):
+    """The target region in words: 'genome', 'amplicons' or 'E1E2 region'."""
+    return f"{denominator[len('region:'):]} region" if denominator.startswith("region:") else denominator
+
+
 def _write(path, header, records):
     tmp = f"{path}.tmp"
     with open(tmp, "w") as fh:
@@ -72,7 +77,7 @@ def write_sample_summary(path, rows, trackers):
     """One line per sample: read counts, dominant reference and read length statistics."""
     header = ["sample", "barcode", "neg_control", "reads", "mapped_reads", "mapped_pct", "mapped_bases",
               "dominant_reference", "dominant_read_pct", "dominant_mean_depth", "best_fraction",
-              "total_read_bases", "mean_read_len", "median_read_len", "read_n50", "min_read_len", "max_read_len"]  # fmt: skip
+              "total_read_bases", "mean_read_len", "median_read_len", "read_n50", "min_read_len", "max_read_len", "reference_group"]  # fmt: skip
     records = []
     for r in rows:
         t = trackers[r.barcode]
@@ -85,6 +90,7 @@ def write_sample_summary(path, rows, trackers):
             dom or "NA", f"{100 * t.ref_reads[dom] / t.mapped:.1f}" if dom else "NA",
             f"{t.mean_depth(dom):.1f}" if dom else "NA", f"{frac:.3f}",
             *([ls["total"], f"{ls['mean']:.0f}", f"{ls['median']:.0f}", ls["n50"], ls["min"], ls["max"]] if ls else ["NA"] * 6),
+            t.locked_group or "NA",
         ])  # fmt: skip
     _write(path, header, records)
 

@@ -11,6 +11,7 @@ version = "0.1.0"
 minimap2 = ">=2.31,<3"
 python = "3.12.*"
 numpy = ">=2.5.4,<3"
+mafft = ">=7.526,<8"
 
 [feature.dev.dependencies]
 pytest = "*"

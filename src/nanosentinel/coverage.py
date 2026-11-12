@@ -10,6 +10,11 @@ import numpy as np
 from .annotate import natural_key
 
 
+LOCK_MIN_READS = 200  # mapped reads to "taste" before a sibling group is chosen
+LOCK_SWITCH_RATIO = 1.5  # another group must lead the locked one by this factor ...
+LOCK_SWITCH_MARGIN = 100  # ... and by this many reads before the lock moves
+
+
 class SampleTracker:
     """Tracks, per reference, depth along the genome and how much of it is >= target_depth.
 
@@ -18,7 +23,7 @@ class SampleTracker:
     but only a read's primary alignment counts as a read (read totals, length statistics, composition).
     """
 
-    def __init__(self, ref_lengths, target_depth=20, target_fraction=0.9, masks=None):
+    def __init__(self, ref_lengths, target_depth=20, target_fraction=0.9, masks=None, group_of=None, denominators=None):
         if not 1 <= target_depth <= 255:
             raise ValueError("target_depth must be between 1 and 255")
         if not 0 < target_fraction <= 1:
@@ -27,6 +32,9 @@ class SampleTracker:
         self.target = int(target_depth)
         self.fraction = target_fraction
         self.masks = masks or {}
+        self.denominators = denominators or {}  # reference -> size of the target, when it is not the mask's own size
+        self.group_of = group_of or (lambda ref: ref)
+        self.locked_group = None
         self.depth, self.covered = {}, {}
         self.reads = self.mapped = self.bases = 0
         self.ref_reads, self.ref_bases = Counter(), Counter()  # per-reference primary reads / aligned bases
@@ -39,7 +47,11 @@ class SampleTracker:
 
     def denominator(self, ref):
         mask = self.masks.get(ref)
-        return int(mask.sum()) if mask is not None else self.ref_lengths[ref]
+        if mask is not None:
+            # A region target is measured over the region's length on the coordinate axis, so a reference that lacks
+            # part of the region (a partial sequence, a deletion) is held to the whole of it.
+            return self.denominators.get(ref, int(mask.sum()))
+        return 0 if self.masks else self.ref_lengths[ref]  # amplicon mode: a reference without amplicons cannot count
 
     def add(self, ref, start, end, when=None, read_len=0, primary=True):
         """Add one alignment row. Returns True the first time the target is reached."""
@@ -85,8 +97,41 @@ class SampleTracker:
         """Record progress (called after each annotation file, so the series follows the data, not the wall clock)."""
         if self.reads == 0 or (self.series and self.series[-1][1] == self.reads):
             return
+        self.update_lock()
         ref, frac = self.best()
         self.series.append((self.latest, self.reads, self.mapped, self.bases, ref, frac))
+
+    def group_reads(self):
+        """Primary reads per sibling group (for example per subtype)."""
+        totals = Counter()
+        for ref, n in self.ref_reads.items():
+            totals[self.group_of(ref)] += n
+        return totals
+
+    def update_lock(self):
+        """Taste, then lock: choose the sibling group after the first reads, and move only on a clear, large lead.
+
+        Near-identical references share reads, so the single most-read reference flips between siblings; the group
+        (for example the subtype) does not. The lock keeps the dashboard from jumping between them.
+        """
+        totals = self.group_reads()
+        if sum(totals.values()) < LOCK_MIN_READS:
+            return
+        top = max(totals, key=totals.get)
+        if self.locked_group is None:
+            self.locked_group = top
+        elif top != self.locked_group:
+            now, lead = totals[self.locked_group], totals[top]
+            if lead >= LOCK_SWITCH_RATIO * now and lead - now >= LOCK_SWITCH_MARGIN:
+                self.locked_group = top
+
+    def shown(self):
+        """The reference to display: the best-covered sibling in the locked group (before the lock: the best overall)."""
+        if self.locked_group is not None:
+            members = [ref for ref in self.covered if self.group_of(ref) == self.locked_group]
+            if members:
+                return max(members, key=lambda ref: (self.fraction_of(ref), self.ref_reads[ref]))
+        return self.best()[0]
 
     def dominant(self):
         """Reference with the most primary reads, or None."""
@@ -141,12 +186,6 @@ class SampleTracker:
         sums = np.add.reduceat(depth.astype(np.float64), edges[:-1])
         return (sums / np.diff(edges)).round(1).tolist()
 
-    def amplicon_depths(self, ref, amplicons):
-        """Median depth of each amplicon span on ``ref`` (None if the reference has no coverage)."""
-        depth = self.depth.get(ref)
-        if depth is None:
-            return None
-        return [float(np.median(depth[min(s, len(depth)) : min(e, len(depth))])) if e > s else 0.0 for s, e in amplicons]
 
 
 def parse_time(text):

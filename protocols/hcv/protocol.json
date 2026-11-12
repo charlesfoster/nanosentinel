@@ -1,0 +1,576 @@
+{
+  "format": 1,
+  "name": "hcv",
+  "created": "2026-11-12T00:00:01Z",
+  "nanosentinel": "0.1.0",
+  "mafft": "v7.526 (2024/Apr/26)",
+  "coordinate_ref": "1a_AF009606.1",
+  "coordinate_length": 9646,
+  "group_pattern": "^([^_]+)_",
+  "genes": {
+    "Core": {
+      "start": 342,
+      "end": 914,
+      "strand": 1
+    },
+    "E1": {
+      "start": 915,
+      "end": 1490,
+      "strand": 1
+    },
+    "E2": {
+      "start": 1491,
+      "end": 2579,
+      "strand": 1
+    },
+    "p7": {
+      "start": 2580,
+      "end": 2768,
+      "strand": 1
+    },
+    "NS2": {
+      "start": 2769,
+      "end": 3419,
+      "strand": 1
+    },
+    "NS3": {
+      "start": 3420,
+      "end": 5312,
+      "strand": 1
+    },
+    "NS4A": {
+      "start": 5313,
+      "end": 5474,
+      "strand": 1
+    },
+    "NS4B": {
+      "start": 5475,
+      "end": 6257,
+      "strand": 1
+    },
+    "NS5A": {
+      "start": 6258,
+      "end": 7601,
+      "strand": 1
+    },
+    "NS5B": {
+      "start": 7602,
+      "end": 9374,
+      "strand": 1
+    }
+  },
+  "regions": {
+    "E1E2": {
+      "start": 915,
+      "end": 2579
+    }
+  },
+  "amplicon_names": [
+    "Seg1",
+    "Seg2",
+    "Seg3",
+    "Seg4",
+    "Seg5",
+    "Seg6",
+    "Seg7",
+    "Seg8",
+    "Seg9",
+    "Seg10"
+  ],
+  "amplicon_pattern": "^(Seg[0-9]+)_",
+  "primer_matching": {
+    "max_mismatch": 5,
+    "max_3prime_mismatch": 1
+  },
+  "inputs": {
+    "genes": "genes.gff",
+    "primers": "primers.fa"
+  },
+  "unaligned_references": [],
+  "qc": {
+    "references": 238,
+    "aligned_references": 238,
+    "poorly_aligned": [],
+    "placed_fraction_min": 0.968,
+    "unplaced_primers": [
+      "Seg9_HCV2_LEFT"
+    ],
+    "primer_support": {
+      "Seg1_AllHCV_LEFT": {
+        "coordinate": 291,
+        "references": 234
+      },
+      "Seg1_AllHCV_RIGHTv2": {
+        "coordinate": 1403,
+        "references": 38
+      },
+      "Seg2_allHCV_LEFTv3": {
+        "coordinate": 1302,
+        "references": 176
+      },
+      "Seg2_AllHCV_RIGHT": {
+        "coordinate": 1997,
+        "references": 166
+      },
+      "Seg2_HCV_2b_LEFTv2": {
+        "coordinate": 1262,
+        "references": 13
+      },
+      "Seg2_allHCV_RIGHT_1a": {
+        "coordinate": 1980,
+        "references": 14
+      },
+      "Seg3_allHCV_RIGHTv2": {
+        "coordinate": 2581,
+        "references": 18
+      },
+      "Seg3_HCV1b_RIGHT": {
+        "coordinate": 2581,
+        "references": 13
+      },
+      "Seg3_HCV_1a_LEFTv2": {
+        "coordinate": 1799,
+        "references": 120
+      },
+      "Seg3_HCV_1b_LEFT": {
+        "coordinate": 1803,
+        "references": 66
+      },
+      "Seg3_HCV_3_LEFTv2": {
+        "coordinate": 1797,
+        "references": 42
+      },
+      "Seg4_allHCV_LEFTv6": {
+        "coordinate": 2423,
+        "references": 158
+      },
+      "Seg4_HCV1_RIGHT_v2": {
+        "coordinate": 3742,
+        "references": 46
+      },
+      "Seg4_HCV2_RIGHT": {
+        "coordinate": 3643,
+        "references": 22
+      },
+      "Seg4_HCV3_RIGHT": {
+        "coordinate": 3636,
+        "references": 9
+      },
+      "Seg5_allHCV_LEFTv2": {
+        "coordinate": 3488,
+        "references": 40
+      },
+      "Seg5_allHCV_RIGHT": {
+        "coordinate": 4461,
+        "references": 169
+      },
+      "Seg5_HCV3a_LEFT": {
+        "coordinate": 3463,
+        "references": 4
+      },
+      "Seg6_allHCV_LEFTv2": {
+        "coordinate": 4043,
+        "references": 75
+      },
+      "Seg6_allHCV_RIGHT": {
+        "coordinate": 5162,
+        "references": 55
+      },
+      "Seg6_HCV1b_LEFT": {
+        "coordinate": 4060,
+        "references": 45
+      },
+      "Seg6_HCV1b_RIGHT": {
+        "coordinate": 5219,
+        "references": 22
+      },
+      "Seg7_allHCV_LEFT": {
+        "coordinate": 4901,
+        "references": 71
+      },
+      "Seg7_HCV1_RIGHT": {
+        "coordinate": 6291,
+        "references": 22
+      },
+      "Seg7_HCV2_3_RIGHT": {
+        "coordinate": 6291,
+        "references": 62
+      },
+      "Seg7_HCV2b_LEFT": {
+        "coordinate": 5007,
+        "references": 216
+      },
+      "Seg7_HCV2b_RIGHT": {
+        "coordinate": 6275,
+        "references": 66
+      },
+      "Seg8_allHCV_LEFTv2": {
+        "coordinate": 6092,
+        "references": 142
+      },
+      "Seg8_HCV1_RIGHT": {
+        "coordinate": 7374,
+        "references": 15
+      },
+      "Seg8_HCV3_RIGHTv2": {
+        "coordinate": 7363,
+        "references": 5
+      },
+      "Seg8_HCV2b_LEFTv2": {
+        "coordinate": 6081,
+        "references": 120
+      },
+      "Seg8_HCV2b_RIGHTv2": {
+        "coordinate": 7388,
+        "references": 4
+      },
+      "Seg9_allHCV_RIGHT": {
+        "coordinate": 8271,
+        "references": 114
+      },
+      "Seg9_HCV_1a_LEFT": {
+        "coordinate": 7256,
+        "references": 8
+      },
+      "Seg9_HCV_1b_LEFTv2": {
+        "coordinate": 7281,
+        "references": 7
+      },
+      "Seg9_HCV3_LEFTv2": {
+        "coordinate": 7235,
+        "references": 4
+      },
+      "Seg9_HCV3_RIGHT": {
+        "coordinate": 8290,
+        "references": 19
+      },
+      "Seg10_allHCV_LEFTv2": {
+        "coordinate": 8073,
+        "references": 106
+      },
+      "Seg10_allHCV_RIGHTv2": {
+        "coordinate": 9289,
+        "references": 118
+      }
+    },
+    "amplicon_references": {
+      "Seg1": 218,
+      "Seg2": 223,
+      "Seg3": 137,
+      "Seg4": 200,
+      "Seg5": 191,
+      "Seg6": 230,
+      "Seg7": 235,
+      "Seg8": 58,
+      "Seg9": 182,
+      "Seg10": 217
+    },
+    "amplicon_missing_groups": {
+      "Seg1": [
+        "2u",
+        "4s",
+        "5",
+        "6a",
+        "6xh",
+        "7a",
+        "7b"
+      ],
+      "Seg2": [
+        "3",
+        "3h",
+        "6h",
+        "6l",
+        "7",
+        "7a",
+        "7b",
+        "8a"
+      ],
+      "Seg3": [
+        "1k",
+        "2e",
+        "2i",
+        "2j",
+        "2u",
+        "4",
+        "4a",
+        "4b",
+        "4c",
+        "4d",
+        "4f",
+        "4g",
+        "4g?",
+        "4k",
+        "4l",
+        "4m",
+        "4n",
+        "4o",
+        "4p",
+        "4q",
+        "4r",
+        "4s",
+        "4t",
+        "4v",
+        "4w",
+        "5",
+        "6a",
+        "6b",
+        "6f",
+        "6l",
+        "6n",
+        "6r",
+        "6xd",
+        "6xh",
+        "7",
+        "7b"
+      ],
+      "Seg4": [
+        "1g",
+        "5a",
+        "6g",
+        "6k",
+        "6l",
+        "6m",
+        "6q",
+        "6t",
+        "6v",
+        "6xc",
+        "6xf"
+      ],
+      "Seg5": [
+        "2e",
+        "4a",
+        "4c",
+        "4d",
+        "4f",
+        "4k",
+        "4l",
+        "4n",
+        "4o",
+        "4p",
+        "4s",
+        "4t",
+        "4v",
+        "6d",
+        "6xe",
+        "7",
+        "7b"
+      ],
+      "Seg6": [
+        "2e",
+        "4q",
+        "6b",
+        "6xe"
+      ],
+      "Seg7": [
+        "4l"
+      ],
+      "Seg8": [
+        "1e",
+        "1o",
+        "2a",
+        "2c",
+        "2d",
+        "2e",
+        "2f",
+        "2i",
+        "2j",
+        "2k",
+        "2m",
+        "2q",
+        "2r",
+        "2t",
+        "2u",
+        "2v",
+        "3",
+        "3g",
+        "3h",
+        "3i",
+        "3k",
+        "4b",
+        "4c",
+        "4d",
+        "4f",
+        "4g",
+        "4g?",
+        "4k",
+        "4l",
+        "4m",
+        "4n",
+        "4o",
+        "4p",
+        "4q",
+        "4r",
+        "4s",
+        "4t",
+        "4v",
+        "4w",
+        "5",
+        "5a",
+        "6a",
+        "6b",
+        "6c",
+        "6d",
+        "6e",
+        "6f",
+        "6g",
+        "6h",
+        "6i",
+        "6k",
+        "6l",
+        "6n",
+        "6p",
+        "6q",
+        "6r",
+        "6s",
+        "6u",
+        "6v",
+        "6w",
+        "6xa",
+        "6xb",
+        "6xc",
+        "6xd",
+        "6xe",
+        "6xf",
+        "6xg",
+        "6xh",
+        "6xi",
+        "6xj",
+        "7",
+        "7a",
+        "7b"
+      ],
+      "Seg9": [
+        "2e",
+        "2t",
+        "3i",
+        "4b",
+        "4g?",
+        "4l",
+        "4o",
+        "4q",
+        "4t",
+        "5",
+        "5a",
+        "6g",
+        "6h",
+        "6m",
+        "6o",
+        "6p",
+        "6r",
+        "6s",
+        "6u",
+        "6xc",
+        "7",
+        "7a",
+        "7b"
+      ],
+      "Seg10": [
+        "2t",
+        "4c",
+        "5",
+        "6t",
+        "7",
+        "7a",
+        "7b"
+      ]
+    },
+    "references_with_all_amplicons": 34,
+    "features": {
+      "gene:Core": {
+        "expected_bp": 573,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 573,
+        "span_max": 573
+      },
+      "gene:E1": {
+        "expected_bp": 576,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 575,
+        "span_max": 582
+      },
+      "gene:E2": {
+        "expected_bp": 1089,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 1077,
+        "span_max": 1113
+      },
+      "gene:p7": {
+        "expected_bp": 189,
+        "status": {
+          "ok": 237,
+          "partial": 1
+        },
+        "span_min": 189,
+        "span_max": 189
+      },
+      "gene:NS2": {
+        "expected_bp": 651,
+        "status": {
+          "ok": 237,
+          "odd_span": 1
+        },
+        "span_min": 591,
+        "span_max": 852
+      },
+      "gene:NS3": {
+        "expected_bp": 1893,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 1893,
+        "span_max": 1893
+      },
+      "gene:NS4A": {
+        "expected_bp": 162,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 162,
+        "span_max": 162
+      },
+      "gene:NS4B": {
+        "expected_bp": 783,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 783,
+        "span_max": 783
+      },
+      "gene:NS5A": {
+        "expected_bp": 1344,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 1326,
+        "span_max": 1437
+      },
+      "gene:NS5B": {
+        "expected_bp": 1773,
+        "status": {
+          "ok": 235,
+          "partial": 3
+        },
+        "span_min": 1618,
+        "span_max": 1773
+      },
+      "region:E1E2": {
+        "expected_bp": 1665,
+        "status": {
+          "ok": 238
+        },
+        "span_min": 1653,
+        "span_max": 1689
+      }
+    }
+  },
+  "files": {
+    "panel.fasta": "8bb4b63e39614c038db4acef9e220d7b94abc126",
+    "coordinate_maps.npz": "7eeef9063582ef7eeaed661d390995bc7212fb03"
+  }
+}

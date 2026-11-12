@@ -124,7 +124,7 @@ function renderTop() {
   $("state").textContent = FINAL ? "final snapshot" : (online ? "live" : "disconnected");
   $("updated").textContent = "updated " + D.updated;
   $("tiles").innerHTML = [["Run time", hms(D.elapsed_s)], ["Reads", nf(D.reads)], ["Samples at target", done + " / " + real.length],
-    ["Target", D.target_depth + "x over " + pct(D.target_fraction) + (D.denominator === "amplicons" ? " of amplicons" : " of genome")]]
+    ["Target", D.target_depth + "x over " + pct(D.target_fraction) + (D.denominator === "amplicons" ? " of amplicons" : D.denominator.startsWith("region:") ? " of " + D.denominator.slice(7) + " region" : " of genome")]]
     .map(([l, v]) => `<div class="tile"><div class="label">${l}</div><div class="value">${esc(v)}</div></div>`).join("");
   $("warnings").innerHTML = D.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join("");
 }
@@ -151,18 +151,27 @@ function renderTable() {
 let mode = location.hash === "#all" ? "all" : "one";
 function coveragePlot(s, o) {
   const c = s.coverage; if (!c || !c.bins) return '<p class="muted">No reads mapped yet.</p>';
-  const W = o.width, H = o.height, m = { l: 48, r: 14, t: o.genes ? 26 : 8, b: o.compact ? 22 : 28 }, n = c.bins.length;
-  const x = lin(1, c.length, m.l, W - m.r), top = Math.max(...c.bins, D.target_depth * 1.25), yt = ticks(top, o.compact ? 3 : 4, true), y = lin(0, yt[yt.length - 1], H - m.b, m.t);
-  const onCoord = c.ref === D.coordinate_ref;
+  const W = o.width, H = o.height, m = { l: 48, r: 14, t: o.genes ? 30 : 8, b: o.compact ? 22 : 28 }, n = c.bins.length;
+  const x = lin(1, c.length, m.l, W - m.r), top = Math.max(0, ...c.bins.filter((v) => v != null), D.target_depth * 1.25), yt = ticks(top, o.compact ? 3 : 4, true), y = lin(0, yt[yt.length - 1], H - m.b, m.t);
+  const onCoord = c.axis === "coordinate";
   let g = "";
   yt.forEach((v) => { g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${nf(v)}</text>`; });
   ticks(c.length, 6).forEach((v) => { g += `<text x="${x(Math.max(v, 1))}" y="${H - (o.compact ? 6 : 8)}" text-anchor="middle">${nf(v)}</text>`; });
-  if (onCoord) D.amplicons.forEach(([a, b], i) => { if (i % 2 === 0) g += `<rect x="${x(a)}" y="${m.t}" width="${Math.max(1, x(b) - x(a))}" height="${H - m.b - m.t}" fill="var(--surface-2)"/>`; });
+  if (onCoord) (s.amp_spans || []).forEach(([, a, b], i) => { if (i % 2 === 0) g += `<rect x="${x(a)}" y="${m.t}" width="${Math.max(1, x(b) - x(a))}" height="${H - m.b - m.t}" fill="var(--surface-2)"/>`; });
+  // Named regions (for example E1E2) are tinted in every plot, with a bar along the top and a label, so they read at a glance.
+  let regionLabels = "";
+  if (onCoord) (D.regions || []).forEach((rg) => { const a = x(rg.start), b = x(rg.end), w = Math.max(1, b - a), isTarget = D.denominator === "region:" + rg.name, label = rg.name + (isTarget ? " (target)" : "");
+    g += `<rect x="${a}" y="${m.t}" width="${w}" height="${H - m.b - m.t}" fill="var(--series-2)" fill-opacity="${isTarget ? 0.16 : 0.1}"><title>${esc(rg.name)}: ${nf(rg.start)}–${nf(rg.end)} on ${esc(D.coordinate_ref)}</title></rect>`
+       + `<rect x="${a}" y="${m.t}" width="${w}" height="3" fill="var(--series-2)"/>`;
+    if (w > label.length * 6.5 + 8) regionLabels += `<text class="lbl halo" x="${a + 5}" y="${m.t + 15}" style="fill:var(--series-2);font-weight:600">${esc(label)}</text>`; });
   const step = (c.length) / n, px = (i) => x(1 + (i + 0.5) * step);
-  const line = c.bins.map((v, i) => px(i).toFixed(1) + "," + y(v).toFixed(1)).join("L");
-  g += `<path d="M${px(0)},${y(0)}L${line}L${px(n - 1)},${y(0)}Z" fill="var(--series-1)" fill-opacity="0.12"/><path d="M${line}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+  // Draw runs of bins; a null bin (no base of this reference lines up with that part of the axis) breaks the line.
+  const runs = []; c.bins.forEach((v, i) => { if (v == null) { runs.push(null); } else { if (!runs.length || runs[runs.length - 1] === null) runs.push([]); runs[runs.length - 1].push([px(i), y(v)]); } });
+  runs.filter((r) => r && r.length).forEach((r) => { const line = r.map(([a, b]) => a.toFixed(1) + "," + b.toFixed(1)).join("L");
+    g += `<path d="M${r[0][0]},${y(0)}L${line}L${r[r.length - 1][0]},${y(0)}Z" fill="var(--series-1)" fill-opacity="0.12"/><path d="M${line}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`; });
   g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(D.target_depth)}" y2="${y(D.target_depth)}" stroke="var(--text-secondary)"/><text class="lbl halo" x="${W - m.r}" y="${y(D.target_depth) - 4}" text-anchor="end">target ${D.target_depth}x</text>`;
   if (onCoord && o.genes) D.genes.forEach((gn) => { const a = x(gn.start), b = x(gn.end); g += `<rect x="${a}" y="4" width="${Math.max(1, b - a)}" height="14" rx="3" fill="var(--surface-2)" stroke="var(--grid)"/>`; if (b - a > gn.name.length * 6.5 + 6) g += `<text class="lbl" x="${(a + b) / 2}" y="15" text-anchor="middle">${esc(gn.name)}</text>`; });
+  g += regionLabels;
   g += `<line class="xh" y1="${m.t}" y2="${H - m.b}" stroke="var(--text-secondary)" visibility="hidden"/>`;
   return `<div class="scroll"><svg class="cov" data-s="${esc(s.name)}" width="${W}" height="${H}" role="img" aria-label="Depth along ${esc(c.ref)} for ${esc(s.name)}">${g}</svg></div>`;
 }
@@ -190,7 +199,7 @@ function renderAll() {
     <span>${s.reached ? '<span class="ok" aria-hidden="true">✓</span>' : ""}covered ${pct(s.best_fraction)} at ≥${D.target_depth}x</span>
     <span>mean depth ${s.mean_depth == null ? "–" : s.mean_depth + "x"}</span><span>${nf(s.reads)} reads</span></div>
     ${coveragePlot(s, { width: W, height: 140, compact: true, genes: i === 0 })}</div>`).join("");
-  el.innerHTML = `<h2>Coverage by sample ${viewToggle()}</h2><p class="note">Each plot has its own depth scale. Click a sample's name to view it on its own.</p>${rows}`;
+  el.innerHTML = `<h2>Coverage by sample ${viewToggle()}</h2><p class="note">Each plot has its own depth scale. Click a sample's name to view it on its own.${(D.regions || []).length ? " The orange band is " + (D.regions.map((r) => r.name).join(", ")) + (D.denominator.startsWith("region:") ? "; the target is measured over it." : ".") : ""}</p>${rows}`;
   bindToggle();
   el.querySelectorAll("svg.cov").forEach((svg) => bindCoverage(svg, D.samples.find((v) => v.name === svg.dataset.s)));
   el.querySelectorAll(".mini-head").forEach((h) => { h.onclick = () => { sel = h.dataset.s; mode = "one"; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} render(); }; });
@@ -206,7 +215,8 @@ function renderDetail() {
     <div class="stats"><span>Reads <b>${nf(s.reads)}</b></span><span>Mapped <b>${s.mapped_pct == null ? "–" : s.mapped_pct + "%"}</b></span><span>Covered at ≥${D.target_depth}x <b>${pct(s.best_fraction)}</b></span>
     <span>Mean depth <b>${s.mean_depth == null ? "–" : s.mean_depth + "x"}</b></span><span>Median length <b>${nf(s.median_len)}</b></span><span>N50 <b>${nf(s.n50)}</b></span></div>
     ${coveragePlot(s, { width: Math.max(320, $("detail").clientWidth - 28), height: 230, compact: false, genes: true })}
-    ${s.coverage && s.coverage.ref !== D.coordinate_ref && D.amplicons.length ? '<p class="note">Amplicons and genes are drawn for ' + esc(D.coordinate_ref) + " only; this sample's most covered reference is " + esc(s.coverage.ref) + ".</p>" : ""}
+    ${s.coverage && s.coverage.axis !== "coordinate" && (D.genes.length || D.amplicon_names.length) ? '<p class="note">Genes and amplicons are not drawn: ' + esc(s.coverage.ref) + " is not aligned to " + esc(D.coordinate_ref) + (D.protocol ? "" : " (quick mode annotates only the coordinate reference; prepare a protocol with prep-protocol to annotate every reference)") + ".</p>" : ""}
+    ${s.coverage && s.coverage.axis === "coordinate" && s.coverage.ref !== D.coordinate_ref ? '<p class="note">Drawn on the ' + esc(D.coordinate_ref) + " axis (positions are " + esc(D.coordinate_ref) + " numbers); depth is from " + esc(s.coverage.ref) + ".</p>" : ""}
     <h2 style="margin-top:12px">Reference composition <span class="muted">(primary alignments)</span></h2>${bar || '<p class="muted">No mapped reads yet.</p>'}
     <div class="legend">${comp.map(([ref, k]) => `<span style="--c:${colourOf(ref)}">${esc(ref)} · ${nf(k)} (${(100 * k / tot).toFixed(0)}%)</span>`).join("")}</div>`;
   bindToggle();
@@ -240,20 +250,20 @@ function renderProgress() {
 
 // ---- amplicon heatmap -----------------------------------------------------------------------------------------------
 function renderAmp() {
-  const card = $("ampcard"), rows = D.samples.filter((s) => s.amp);
-  card.hidden = !D.amplicons.length; if (card.hidden) return;
-  $("ampnote").textContent = "Median depth of each amplicon on " + D.coordinate_ref + ". Cells are shaded by depth relative to the " + D.target_depth + "x target; hatched cells have no coverage (possible dropout).";
+  const card = $("ampcard"), rows = D.samples.filter((s) => s.amp), names = D.amplicon_names;
+  card.hidden = !names.length; if (card.hidden) return;
+  $("ampnote").textContent = "Median depth of each amplicon on the sample's own reference. Cells are shaded by depth relative to the " + D.target_depth + "x target; hatched cells have no coverage (possible dropout); grey cells have no primer site on that reference.";
   if (!rows.length) { $("amp").innerHTML = '<p class="muted">Waiting for reads.</p>'; return; }
-  const cw = Math.max(8, Math.min(26, Math.floor((width(card) - 190) / D.amplicons.length))), ch = 18, L = 150, T = 18, W = L + cw * D.amplicons.length + 8, H = T + ch * rows.length + 4;
-  const cls = (d) => (d < 1 ? -1 : d < 0.25 * D.target_depth ? 0 : d < 0.5 * D.target_depth ? 1 : d < D.target_depth ? 2 : 3);
+  const cw = Math.max(8, Math.min(26, Math.floor((width(card) - 190) / names.length))), ch = 18, L = 150, T = 18, W = L + cw * names.length + 8, H = T + ch * rows.length + 4;
+  const cls = (d) => (d == null ? -2 : d < 1 ? -1 : d < 0.25 * D.target_depth ? 0 : d < 0.5 * D.target_depth ? 1 : d < D.target_depth ? 2 : 3);
   let g = '<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface-1)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--critical)" stroke-width="2"/></pattern></defs>';
-  D.amplicons.forEach((_, i) => { if (i % Math.ceil(24 / cw) === 0) g += `<text x="${L + i * cw + cw / 2}" y="12" text-anchor="middle">${i + 1}</text>`; });
+  names.forEach((nm, i) => { if (i % Math.ceil(24 / cw) === 0) g += `<text x="${L + i * cw + cw / 2}" y="12" text-anchor="middle">${esc(nm.replace(/^Seg/, ""))}</text>`; });
   rows.forEach((s, r) => { g += `<text class="lbl" x="${L - 8}" y="${T + r * ch + 13}" text-anchor="end">${esc(s.name.length > 20 ? s.name.slice(0, 19) + "…" : s.name)}</text>`;
-    s.amp.forEach((d, i) => { const c = cls(d); g += `<rect data-s="${esc(s.name)}" data-i="${i}" x="${L + i * cw + 1}" y="${T + r * ch + 1}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="${c < 0 ? "url(#hatch)" : "var(--seq-" + (c + 1) + ")"}"/>`; }); });
+    s.amp.forEach((d, i) => { const c = cls(d); g += `<rect data-s="${esc(s.name)}" data-i="${i}" x="${L + i * cw + 1}" y="${T + r * ch + 1}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="${c === -2 ? "var(--grid)" : c < 0 ? "url(#hatch)" : "var(--seq-" + (c + 1) + ")"}"/>`; }); });
   $("amp").innerHTML = `<svg id="ampsvg" width="${W}" height="${H}" role="img" aria-label="Amplicon depth by sample">${g}</svg>
-    <div class="legend"><span style="--c:var(--critical)">no coverage</span><span style="--c:var(--seq-1)">&lt;25% of target</span><span style="--c:var(--seq-2)">25–50%</span><span style="--c:var(--seq-3)">50–100%</span><span style="--c:var(--seq-4)">at or above target</span></div>`;
-  $("ampsvg").querySelectorAll("rect[data-i]").forEach((r) => { r.onpointermove = (ev) => { const s = rows.find((v) => v.name === r.dataset.s), i = +r.dataset.i, [a, b] = D.amplicons[i];
-    showTip(ev, `${esc(s.name)}<br>amplicon ${i + 1} (${nf(a)}–${nf(b)})<br>median depth ${s.amp[i].toLocaleString()}x`); }; r.onpointerleave = hideTip; });
+    <div class="legend"><span style="--c:var(--grid)">no primer site</span><span style="--c:var(--critical)">no coverage</span><span style="--c:var(--seq-1)">&lt;25% of target</span><span style="--c:var(--seq-2)">25–50%</span><span style="--c:var(--seq-3)">50–100%</span><span style="--c:var(--seq-4)">at or above target</span></div>`;
+  $("ampsvg").querySelectorAll("rect[data-i]").forEach((r) => { r.onpointermove = (ev) => { const s = rows.find((v) => v.name === r.dataset.s), i = +r.dataset.i, sp = (s.amp_spans || []).find((a) => a[0] === names[i]);
+    showTip(ev, `${esc(s.name)} · ${esc(s.coverage ? s.coverage.ref : "")}<br>${esc(names[i])}${sp ? " (" + nf(sp[1] + 1) + "–" + nf(sp[2]) + " on " + esc(D.coordinate_ref) + ")" : ""}<br>` + (s.amp[i] == null ? "no primer site on this reference" : "median depth " + s.amp[i].toLocaleString() + "x")); }; r.onpointerleave = hideTip; });
 }
 
 // ---- read length histogram ----------------------------------------------------------------------------------------

@@ -1,0 +1,13 @@
+##gff-version 3
+# H77 (AF009606.1): the polyprotein starts at 342 (GenBank CDS 342..9377). Genes are the mature proteins, from the
+# standard polyprotein cleavage sites (amino acids 1-191, 192-383, ... 2421-3011), checked against the GenBank translation.
+1a_AF009606.1	H77_polyprotein_cleavage	gene	342	914	.	+	.	ID=Core;Name=Core
+1a_AF009606.1	H77_polyprotein_cleavage	gene	915	1490	.	+	.	ID=E1;Name=E1
+1a_AF009606.1	H77_polyprotein_cleavage	gene	1491	2579	.	+	.	ID=E2;Name=E2
+1a_AF009606.1	H77_polyprotein_cleavage	gene	2580	2768	.	+	.	ID=p7;Name=p7
+1a_AF009606.1	H77_polyprotein_cleavage	gene	2769	3419	.	+	.	ID=NS2;Name=NS2
+1a_AF009606.1	H77_polyprotein_cleavage	gene	3420	5312	.	+	.	ID=NS3;Name=NS3
+1a_AF009606.1	H77_polyprotein_cleavage	gene	5313	5474	.	+	.	ID=NS4A;Name=NS4A
+1a_AF009606.1	H77_polyprotein_cleavage	gene	5475	6257	.	+	.	ID=NS4B;Name=NS4B
+1a_AF009606.1	H77_polyprotein_cleavage	gene	6258	7601	.	+	.	ID=NS5A;Name=NS5A
+1a_AF009606.1	H77_polyprotein_cleavage	gene	7602	9374	.	+	.	ID=NS5B;Name=NS5B

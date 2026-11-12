@@ -91,3 +91,162 @@ def test_paf_parsing_primary_secondary_chimeric_and_identity_filter():
     assert [(r[0], r[-1]) for r in out["r1"]] == [("A", 1), ("B", 0)]
     assert "r2" not in out
     assert [(r[2], r[-1]) for r in out["r3"]] == [(2000, 1), (100, 0)]
+
+
+# ---- protocols: coordinate maps, primers, lifting, projection -------------------------------------------------------
+
+import random
+
+import numpy as np
+
+from nanosentinel import protocol as proto
+from nanosentinel.references import ReferenceInfo
+
+
+def _random_seq(n, seed):
+    rng = random.Random(seed)
+    return "".join(rng.choice("ACGT") for _ in range(n))
+
+
+def test_coordinate_map_handles_insertions_and_deletions_exactly():
+    # coordinate ACGTACGT; R inserts GG after position 3 (a gap column in the coordinate row) and lacks position 6
+    aligned = {"C": "ACGT--ACGT", "R": "ACGTGGAC-T"}
+    maps = proto.build_maps(aligned, "C", {"C": "ACGTACGT", "R": "ACGTGGACT"})
+    assert maps["C"].tolist() == [0, 1, 2, 3, 4, 5, 6, 7]
+    assert maps["R"].tolist() == [0, 1, 2, 3, -1, -1, 4, 5, 7]  # the inserted GG has no coordinate; deletion skipped 6
+    with pytest.raises(proto.ProtocolError):  # an alignment of some other sequence is rejected, not silently used
+        proto.build_maps(aligned, "C", {"C": "ACGTACGT", "R": "ACGTGGACA"})
+
+
+def test_projection_and_lifting_through_a_map():
+    info = ReferenceInfo({"C": 8, "R": 9}, "C", maps={"C": np.arange(8, dtype=np.int32),
+                         "R": np.array([0, 1, 2, 3, -1, -1, 4, 5, 7], dtype=np.int32)})  # fmt: skip
+    depth = np.arange(1, 10, dtype=np.uint32) * 10  # depth on R: 10 .. 90
+    values, valid = info.project("R", depth)
+    assert valid.tolist() == [True, True, True, True, True, True, False, True]  # coordinate position 6 is deleted in R
+    assert values.tolist() == [10, 20, 30, 40, 70, 80, 0, 90]
+    assert info.to_coordinate("R", 4, 6) is None  # an interval that is all insertion has no place on the axis
+    assert info.to_coordinate("R", 3, 9) == (3, 8)
+    assert info.project("X", depth) is None  # a reference without a map cannot be projected
+    assert info.group("1a_AF009606.1") == "1a" and info.group("plain") == "plain"
+
+
+def test_primer_matching_is_iupac_aware_and_protects_the_3prime_end():
+    codes = proto._CODES[np.frombuffer(b"TTTACGTTTT", dtype=np.uint8)]
+    total, tail = proto.mismatches(codes, "ACGT")
+    assert total[3] == 0  # exact site
+    total, tail = proto.mismatches(codes, "ACRT")
+    assert total[3] == 0  # R = A or G
+    total, tail = proto.mismatches(codes, "TCGT")
+    assert total[3] == 1 and tail[3] == 1  # the mismatch is at the primer's 3' end (last 5 bases cover all of it)
+    n_codes = proto._CODES[np.frombuffer(b"ACNT", dtype=np.uint8)]
+    assert proto.mismatches(n_codes, "ACGT")[0][0] == 1  # N never counts as a match
+    assert proto.reverse_complement("AACGTR") == "YACGTT"
+
+
+def _panel(seed=1, n_refs=4):
+    coord = _random_seq(600, seed)
+    seqs = {"C": coord}
+    rng = random.Random(seed + 1)
+    for i in range(n_refs - 1):
+        s = list(coord)
+        for pos in rng.sample(range(100, 200), 6) + rng.sample(range(330, 500), 6):  # away from the primer sites
+            s[pos] = rng.choice([b for b in "ACGT" if b != s[pos]])
+        seqs[f"R{i}"] = "".join(s)
+    return seqs
+
+
+def test_primers_are_placed_near_their_home_and_far_chance_hits_are_ignored(tmp_path):
+    seqs = _panel()
+    c = seqs["C"]
+    left, right = c[50:70], proto.reverse_complement(c[250:270])
+    maps = {k: np.arange(len(v), dtype=np.int32) for k, v in seqs.items()}
+    primers = [{"name": "A1_LEFT", "seq": left, "amplicon": "A1", "side": "LEFT"},
+               {"name": "A1_RIGHT", "seq": right, "amplicon": "A1", "side": "RIGHT"}]  # fmt: skip
+    # plant a second, near-perfect copy of the left primer far away on one reference: it must not be chosen
+    far = list(seqs["R0"]); far[500:520] = left; seqs["R0"] = "".join(far)
+    sites, expected, unplaced = proto.place_primers(primers, seqs, maps)
+    assert not unplaced and expected["A1_LEFT"][0] in range(55, 66)
+    assert all(sites[ref]["A1_LEFT"][:2] == (50, 70) for ref in seqs)
+    assert all(sites[ref]["A1_RIGHT"][:2] == (250, 270) for ref in seqs)
+    amplicons = proto.build_amplicons(primers, sites)
+    assert [a[:3] for a in amplicons["C"]] == [("A1", 50, 270)]
+
+
+def test_features_are_lifted_with_a_status():
+    maps = {"C": np.arange(100, dtype=np.int32),
+            "SHORT": np.arange(40, dtype=np.int32)}  # a partial sequence covering only the first 40 positions
+    lifted = proto.lift_features({"g": (11, 30), "h": (31, 90)}, maps, {"C": 100, "SHORT": 40})
+    assert lifted["C"]["g"] == (11, 30, 20, 20, "ok")
+    assert lifted["SHORT"]["g"][4] == "ok" and lifted["SHORT"]["h"][4] == "absent"
+
+
+def test_protocol_round_trip_with_a_ready_made_alignment(tmp_path):
+    seqs = _panel(seed=5, n_refs=5)
+    panel = tmp_path / "panel.fasta"
+    panel.write_text("".join(f">{'1a' if k == 'C' else '2b'}_{k}\n{v}\n" for k, v in seqs.items()))
+    ids = {k: f"{'1a' if k == 'C' else '2b'}_{k}" for k in seqs}
+    alignment = tmp_path / "aln.fasta"
+    alignment.write_text("".join(f">{ids[k]}\n{v}\n" for k, v in seqs.items()))  # substitutions only: already aligned
+    c = seqs["C"]
+    primers = tmp_path / "primers.fa"
+    primers.write_text(f">Seg1_all_LEFT\n{c[50:70]}\n>Seg1_all_RIGHT\n{proto.reverse_complement(c[250:270])}\n")
+    gff = tmp_path / "g.gff"
+    gff.write_text(f"{ids['C']}\tx\tgene\t11\t100\t.\t+\t.\tID=G1;Name=G1\n")
+    out = tmp_path / "protocol"
+    qc = proto.build_protocol(out, panel, coordinate_ref=ids["C"], gff=gff, regions={"R": (11, 60)}, primer_fasta=primers,
+                              amplicon_pattern=r"^(Seg[0-9]+)_", panel_alignment=alignment, name="toy", say=lambda _: None)  # fmt: skip
+    assert qc["references_with_all_amplicons"] == 5 and qc["features"]["gene:G1"]["status"] == {"ok": 5}
+    info = proto.load_protocol(out, tmp_path / "run")
+    assert info.protocol == "toy" and info.coordinate_ref == ids["C"] and info.amplicon_names == ["Seg1"]
+    assert info.amplicons[ids["R0"]][0][:3] == ("Seg1", 50, 270)
+    assert info.genes["G1"]["end"] == 100 and info.regions["R"]["start"] == 11 and info.index.exists()
+    assert info.mask(ids["C"]).sum() == 220  # amplicon mode counts only bases inside the amplicons
+    (out / "panel.fasta").write_text((out / "panel.fasta").read_text() + ">extra\nACGT\n")
+    with pytest.raises(proto.ProtocolError, match="changed since the protocol was built"):
+        proto.load_protocol(out, tmp_path / "run2")
+
+
+def test_sibling_group_lock_does_not_flip_between_near_identical_references():
+    group = lambda ref: ref.split("_")[0]  # noqa: E731
+    t = SampleTracker({"1a_x": 1000, "1a_y": 1000, "3a_z": 1000}, target_depth=1, target_fraction=0.99, group_of=group)
+    for _ in range(150):
+        t.add("1a_x", 0, 500, None, 500)
+    for _ in range(100):
+        t.add("1a_y", 0, 500, None, 500)  # siblings split the reads
+    t.snapshot()
+    assert t.locked_group == "1a" and t.shown() in ("1a_x", "1a_y")
+    for _ in range(60):
+        t.add("3a_z", 0, 500, None, 500)  # a few reads elsewhere do not move the lock
+    t.snapshot()
+    assert t.locked_group == "1a"
+    for _ in range(600):
+        t.add("3a_z", 0, 500, None, 500)  # but a clear, large lead does
+    t.snapshot()
+    assert t.locked_group == "3a" and t.shown() == "3a_z"
+
+
+def test_region_target_is_held_to_the_whole_region():
+    from types import SimpleNamespace
+
+    from nanosentinel.errors import MonitorError
+    from nanosentinel.monitor import build_trackers
+
+    maps = {
+        "C": np.arange(100, dtype=np.int32),
+        "SHORT": np.arange(40, dtype=np.int32),  # a partial sequence: covers coordinates 0-39 only
+        "DEL": np.concatenate([np.arange(0, 40), np.arange(45, 100)]).astype(np.int32),  # lacks coordinates 40-44
+    }
+    info = ReferenceInfo({"C": 100, "SHORT": 40, "DEL": 95}, "C", regions={"G": {"start": 21, "end": 60}}, maps=maps)
+    rows = [SimpleNamespace(barcode="b")]
+
+    def fraction(ref, length):
+        tracker = build_trackers(rows, info, 1, 0.9, "region:G")["b"]
+        tracker.add(ref, 0, length, None, length)  # every base of the reference covered once
+        return tracker.fraction_of(ref), tracker.reached
+
+    assert fraction("C", 100) == (1.0, True)
+    assert fraction("DEL", 95) == (35 / 40, False)  # 5 of the region's 40 positions do not exist on this reference
+    assert fraction("SHORT", 40) == (20 / 40, False)  # half of the region is missing: it can never reach 90%
+    with pytest.raises(MonitorError, match="no region of that name"):
+        build_trackers(rows, info, 1, 0.9, "region:NOPE")
