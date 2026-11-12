@@ -8,3 +8,8 @@ annotations/
 __pycache__/
 .pytest_cache/
 scratch/
+
+# Default output folders of a run (nanosentinel_<run_name>/) and the examples' output and replay folders
+/nanosentinel_*/
+examples/*/out*/
+examples/*/replay/

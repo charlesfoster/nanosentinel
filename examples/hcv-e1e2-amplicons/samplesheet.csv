@@ -1,0 +1,6 @@
+sample,long_reads,barcode,run_name,neg_control
+1a_patient_A,,BC01,,
+1a_patient_B,,BC02,,
+3a_patient_A,,BC03,,
+3a_patient_B,,BC04,,
+NTC,,BC05,,TRUE
