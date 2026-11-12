@@ -25,7 +25,7 @@ Needs [pixi](https://pixi.sh). The environment (Python, minimap2, MAFFT, numpy) 
 `pixi.lock` changes. Works on Linux and macOS.
 
 ```bash
-git clone <this repo> ~/Programs/nanosentinel
+git clone https://github.com/charlesfoster/nanosentinel.git ~/Programs/nanosentinel
 mkdir -p ~/.local/bin
 ln -s ~/Programs/nanosentinel/bin/nanosentinel ~/.local/bin/nanosentinel
 # make sure ~/.local/bin is on your PATH (add to ~/.bashrc / ~/.zshrc if it is not):
@@ -246,3 +246,7 @@ python dev/replay_run.py /path/to/finished/fastq_pass replay/fastq_pass --speed 
 
 To validate the tool against your analysis pipeline: replay a real run, run `nanosentinel monitor ... --concatenate_reads`,
 put the concatenated reads through the pipeline, and compare its depth with the "covered at >=Nx" reported here.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

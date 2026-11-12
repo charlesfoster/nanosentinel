@@ -1,7 +1,10 @@
 [workspace]
 authors = ["charlesfoster <charles.foster@unsw.edu.au>"]
 channels = ["conda-forge", "bioconda", "artic-network"]
+license = "MIT"
+license-file = "LICENSE"
 name = "nanosentinel"
+repository = "https://github.com/charlesfoster/nanosentinel"
 platforms = ["linux-64", "osx-arm64", "osx-64"]
 version = "0.1.0"
 

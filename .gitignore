@@ -13,3 +13,6 @@ scratch/
 /nanosentinel_*/
 examples/*/out*/
 examples/*/replay/
+
+# macOS
+.DS_Store
