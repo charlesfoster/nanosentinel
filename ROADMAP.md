@@ -17,14 +17,19 @@ sequencer"). Differences from the original sketch, on purpose:
 Still to do: replay a real MinKNOW run (item 2) and run the validation recipe in the README against the analysis
 pipeline. `dev/simulate_run.py` (with `@START-END` windows) covers synthetic runs.
 
-## 2. Check on real data
+## 2. Check on real data (partly done)
 
-Everything so far has been tested only on a fake run built from test reads.
+Done: a finished real run on linux, monitored with the `hcv` protocol and an E1E2 target (real file layout and read
+headers, end to end).
 
-- Run on a real MinKNOW run (layout, header fields such as `start_time=`, chunk sizes).
-- Run on linux-64 on the sequencing machine.
-- Measure annotation throughput at real chunk sizes and output rates.
-- Confirm a restart mid-run reuses annotations and resumes cleanly.
+Still to check:
+
+- A **live** MinKNOW run, as opposed to a finished one: chunks arriving while the run is in progress, and a run that
+  has not started when the monitor does. (`dev/replay_run.py` can stand in until then, using the real dataset.)
+- Annotation throughput at real chunk sizes and output rates, on the sequencing machine (and a large panel).
+- A restart mid-run reuses annotations and resumes cleanly.
+- Compare the "covered at >=Nx" it reports against the depth from the analysis pipeline for the same samples (the
+  validation recipe in the README).
 
 ## 3. Subcommands, protocol prep and per-reference annotation (done)
 

@@ -1,6 +1,6 @@
 # nanosentinel
 
-Monitor a live Oxford Nanopore run from a samplesheet (in the same format as h2seq's, so one sheet can serve both):
+Monitor a live Oxford Nanopore run from a samplesheet (in the form used by the [h2seq pipeline](https://github.com/charlesfoster/h2seq), so one sheet can serve both):
 reads are mapped as MinKNOW writes them, coverage is shown on a local dashboard, and the time each sample takes to
 reach a target depth is recorded. Optionally concatenates each sample's reads for analysis afterwards.
 
@@ -35,7 +35,7 @@ nanosentinel --version
 
 ## Samplesheet
 
-The h2seq samplesheet, plus columns for monitoring. Only `sample` and `barcode` are required.
+A samplesheet in the form used by the [h2seq pipeline](https://github.com/charlesfoster/h2seq), plus columns for monitoring. Only `sample` and `barcode` are required.
 
 ```csv
 sample,long_reads,barcode,run_name,neg_control
@@ -68,6 +68,9 @@ nanosentinel monitor --input samplesheet.csv --run_name 2026-11-09_run \
 
 Opens the dashboard at <http://localhost:6010>. If the run has not started yet it waits for `fastq_pass` to appear
 (Ctrl+C to cancel). Press **Enter** or **Ctrl+C** to stop.
+
+Time to target needs a start time in each read's header: the `st:Z:` tag or the `start_time=` field (MinKNOW writes one
+of them). Reads without one are still mapped and counted for coverage, but no times are reported.
 
 In quick mode the inputs are ordinary files: `--possible_references` is a multi-FASTA panel the reads are mapped to (include one entry per
 genotype or subtype you might see), `--reference_fasta` picks the reference the primer scheme and genes are drawn
@@ -180,13 +183,10 @@ not flip between near-identical references that share reads. The group is report
 
 `protocols/hcv/` (use it as `--protocol hcv`) is built by `protocols/hcv/build.sh`.
 
-- **Panel:** the 238 references of h2seq (`assets/reference_data/hcv_references.fasta`); every one is kept. This is a
-  judgement, not a measured win: in a test with unseen 1a, 1b, 3g and 4k genomes, the full panel and one representative
-  per subtype covered about the same (within ±3 percentage points, better for some genomes and worse for others) and
-  both assigned the right subtype every time. The reasons to keep everything are that alignment and lifting are one-off
-  costs, nothing has to be chosen as "the" representative, the panel stays identical to the one h2seq uses, and the
-  diversity is there if you later want finer calls. The main argument for representatives, near-identical siblings
-  splitting reads and making the displayed reference unstable, is handled by the group lock above.
+- **Panel:** the 238 references of h2seq (`assets/reference_data/hcv_references.fasta`); every one is kept. Alignment and
+  lifting are one-off costs, nothing has to be chosen as "the" representative, the panel stays identical to the one h2seq
+  uses, and a sample is mapped to the nearest genome available. Near-identical siblings share reads; the group lock above
+  keeps that from making the displayed reference unstable.
 - **Coordinate reference:** H77, `1a_AF009606.1`, so positions are H77 numbers (E1E2 = 915-2579).
 - **Genes:** the mature proteins (Core ... NS5B) from the standard polyprotein cleavage sites, checked against the GenBank
   translation (`genes.gff`).
@@ -236,12 +236,11 @@ nanosentinel monitor --input samplesheet.csv --run_dir replay/fastq_pass --proto
 python dev/replay_run.py /path/to/finished/fastq_pass replay/fastq_pass --speed 60
 ```
 
-- Chunks are released in the order the reads were produced, using the reads' own `start_time=` stamps (not file
+- Chunks are released in the order the reads were produced, using the start time in each read's header (not file
   modification times, which a copy loses). A chunk appears when its last read was produced, as MinKNOW would write it.
 - Each chunk is copied under a hidden name and then renamed, so the monitor never sees a half-copied file.
 - `--speed 0` copies everything at once; `--dry_run` prints the schedule.
-- Time to target is computed from the read timestamps, so it does not depend on the replay speed (checked: the same
-  times at 120x as when the whole run is already on disk).
+- Time to target is computed from the read timestamps, so it does not depend on the replay speed.
 - To look at a finished run all at once, no replay is needed: point `--run_dir` at it.
 
 To validate the tool against your analysis pipeline: replay a real run, run `nanosentinel monitor ... --concatenate_reads`,
