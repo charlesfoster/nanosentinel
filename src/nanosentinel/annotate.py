@@ -23,7 +23,10 @@ from . import tools
 
 FASTQ_SUFFIXES = (".fastq.gz", ".fastq", ".fq.gz", ".fq")
 COLUMNS = ["read_name", "read_len", "start_time", "ref", "ref_len", "start", "end", "mapq", "identity", "primary"]
-_START_TIME = re.compile(r"start_time=(\S+)")
+# The read's start time: "start_time=..." (older MinKNOW and guppy) or the SAM-style tag "st:Z:..." (current MinKNOW/dorado).
+_START_TIME = re.compile(r"(?:start_time=|(?<=\s)st:Z:)(\S+)")
+# Bump when what an annotation file holds changes, so annotations made the old way are redone instead of reused.
+ANNOTATION_FORMAT = 2
 
 
 def natural_key(path):
@@ -95,7 +98,7 @@ def write_annotation(path, source_size, panel_hash, reads, alignments):
     """Atomically write one chunk's annotation file."""
     tmp = Path(f"{path}.tmp")
     with open(tmp, "w") as fh:
-        fh.write(f"#source_size={source_size} panel={panel_hash}\n")
+        fh.write(f"#source_size={source_size} panel={panel_hash} format={ANNOTATION_FORMAT}\n")
         fh.write("\t".join(COLUMNS) + "\n")
         for name, length, start_time in reads:
             for ref, ref_len, start, end, mapq, identity, primary in alignments.get(name) or [("*", 0, 0, 0, 0, 0.0, 1)]:
@@ -109,7 +112,7 @@ def annotation_is_current(path, source_size, panel_hash):
             first = fh.readline()
     except OSError:
         return False
-    return first.strip() == f"#source_size={source_size} panel={panel_hash}"
+    return first.strip() == f"#source_size={source_size} panel={panel_hash} format={ANNOTATION_FORMAT}"
 
 
 class Annotator(threading.Thread):

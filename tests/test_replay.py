@@ -105,3 +105,13 @@ def test_refuses_a_destination_that_already_holds_reads(run, tmp_path):
     write_chunk(dest / "barcode01", "old.fastq.gz", [0])
     with pytest.raises(SystemExit):
         replay_run.main([str(run), str(dest), "--speed", "0"])
+
+
+def test_replay_reads_the_sam_style_start_time_tag(tmp_path):
+    src = tmp_path / "fastq_pass" / "barcode01"
+    src.mkdir(parents=True)
+    with gzip.open(src / "a_0.fastq.gz", "wt") as fh:
+        for i, stamp in enumerate(["2026-11-10T14:08:56.683355+11:00", "2026-11-10T14:10:00.5+11:00"]):
+            fh.write(f"@r{i} qs:f:20.1 ch:i:148 st:Z:{stamp} ns:i:100 DT:Z:2026-11-10T14:06:54+11:00 al:Z:barcode01\nACGT\n+\nIIII\n")
+    chunks = replay_run.build_schedule(replay_run.find_chunks(tmp_path / "fastq_pass"))
+    assert chunks[0].reads == 2 and chunks[0].offset == pytest.approx(63.816645)  # last read minus first read

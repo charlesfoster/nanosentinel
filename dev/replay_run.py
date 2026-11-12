@@ -9,7 +9,7 @@ folder to appear), then the replay:
     python dev/replay_run.py SRC_fastq_pass DEST_fastq_pass --speed 60      # one hour of sequencing in a minute
 
 How it behaves
-  * Order and pacing come from the reads' own `start_time=` timestamps, never from file modification times (which are
+  * Order and pacing come from the reads' own start times (`start_time=` or the `st:Z:` tag), never from file modification times (which are
     lost on copy or rsync). A chunk is released when its last read was produced, because that is when MinKNOW would have
     finished writing it. The first read breaks ties.
   * --speed N replays at N times real time (default 1). --speed 0 copies everything at once.
@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 FASTQ_SUFFIXES = (".fastq.gz", ".fastq", ".fq.gz", ".fq")
-_START_TIME = re.compile(r"start_time=(\S+)")
+_START_TIME = re.compile(r"(?:start_time=|(?<=\s)st:Z:)(\S+)")  # older "start_time=", or the SAM-style "st:Z:" tag
 
 
 @dataclass
@@ -114,7 +114,7 @@ def build_schedule(chunks, warn=print):
         previous[folder] = chunk.last
     timed = [c for c in chunks if c.last is not None]
     if not timed:
-        raise SystemExit("none of the reads has a start_time= field, so the run cannot be ordered or paced")
+        raise SystemExit("none of the reads has a start_time= or st:Z: field, so the run cannot be ordered or paced")
     for chunk in chunks:
         if chunk.last is None:  # no timestamp anywhere before it in its folder: release it first
             chunk.first = chunk.last = min(c.first for c in timed)

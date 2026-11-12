@@ -250,3 +250,43 @@ def test_region_target_is_held_to_the_whole_region():
     assert fraction("SHORT", 40) == (20 / 40, False)  # half of the region is missing: it can never reach 90%
     with pytest.raises(MonitorError, match="no region of that name"):
         build_trackers(rows, info, 1, 0.9, "region:NOPE")
+
+
+# ---- read start times: both header styles, and old annotations are redone ----------------------------------------------
+
+REAL_HEADER = (  # a header from current MinKNOW/dorado (SAM-style tags), as seen on a real run
+    "@292ba5f2-d707-4d95-8f13-08a8889dc60f qs:f:20.157257 mx:i:1 ch:i:148 rn:i:1 st:Z:2026-11-10T14:08:56.683355+11:00 "
+    "ns:i:11123 ts:i:2266 sm:f:93.6924 sd:f:23.506744 sv:Z:pa du:f:2.2246 dx:i:0 "
+    "RG:Z:17430652-b625-4d30-8eda-7d1b9a588ad2_dna_r10.4.1_e8.2_400bps_sup@v5.2.0_barcode01 "
+    "DT:Z:2026-11-10T14:06:54.012955+11:00 PU:Z:FBH55487 LB:Z:unknown SM:Z:barcode01 al:Z:barcode01"
+)
+
+
+def test_read_start_time_is_found_in_both_header_styles(tmp_path):
+    from nanosentinel.annotate import read_fastq_info
+    from nanosentinel.coverage import parse_time
+
+    fq = tmp_path / "x.fastq"
+    fq.write_text(
+        f"{REAL_HEADER}\nACGT\n+\nIIII\n"  # current style: st:Z: (DT:Z: is the run start, not the read start)
+        "@r2 runid=x read=2 ch=3 start_time=2026-11-10T14:09:01Z barcode=barcode01\nACGT\n+\nIIII\n"  # older style
+        "@r3 runid=x ch:i:5\nACGT\n+\nIIII\n"  # no start time at all
+    )
+    reads = read_fastq_info(fq)
+    assert [r[0] for r in reads] == ["292ba5f2-d707-4d95-8f13-08a8889dc60f", "r2", "r3"]
+    assert reads[0][2] == "2026-11-10T14:08:56.683355+11:00" and reads[1][2] == "2026-11-10T14:09:01Z" and reads[2][2] == ""
+    assert parse_time(reads[0][2]).isoformat() == "2026-11-10T14:08:56.683355+11:00"
+
+
+def test_annotations_made_before_the_format_change_are_redone_not_reused(tmp_path):
+    from nanosentinel.annotate import annotation_is_current, write_annotation
+    from nanosentinel.coverage import AnnotationReader, SampleTracker
+
+    new, old = tmp_path / "new.tsv", tmp_path / "old.tsv"
+    write_annotation(new, 100, "abc123", [("r1", 500, "2026-11-10T14:08:56+11:00")], {})
+    assert annotation_is_current(new, 100, "abc123")
+    # the same file as an earlier version wrote it: no format field (and, for real runs, blank start times)
+    old.write_text("#source_size=100 panel=abc123\nread_name\tread_len\tstart_time\tref\tref_len\tstart\tend\tmapq\tidentity\tprimary\n")
+    assert not annotation_is_current(old, 100, "abc123")  # so the annotator maps it again
+    reader = AnnotationReader(tmp_path, {"b": SampleTracker({"R": 10})}, "abc123")
+    assert reader._read_file(old, reader.trackers["b"]) is None  # and the reader does not count it in the meantime

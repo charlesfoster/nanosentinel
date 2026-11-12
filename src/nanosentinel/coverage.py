@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .annotate import natural_key
+from .annotate import ANNOTATION_FORMAT, natural_key
 
 
 LOCK_MIN_READS = 200  # mapped reads to "taste" before a sibling group is chosen
@@ -230,7 +230,7 @@ class AnnotationReader:
     def _read_file(self, path, tracker):
         reached = False
         with open(path, newline="") as fh:
-            if f"panel={self.panel_hash}" not in fh.readline():
+            if f"panel={self.panel_hash} format={ANNOTATION_FORMAT}" not in fh.readline():
                 return None
             for row in csv.DictReader(fh, delimiter="\t"):
                 try:
